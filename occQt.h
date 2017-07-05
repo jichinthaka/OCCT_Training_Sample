@@ -44,6 +44,8 @@ protected:
     void createToolBars(void);
 
 private slots:
+	void importBrep(void);
+
     //! show about box.
     void about(void);
 
@@ -91,7 +93,16 @@ private slots:
 
 	void makeBottle(void);
 
-	void makeBoxWithInput(void);
+	void displayBoxWithInputs(void);
+
+	void addBoxFillet(void);
+
+	void drillBoxHole(void);
+
+	void removeDisplaiedAISShape(void);
+
+	void setFirTree(void);
+
 
 	
 
@@ -109,17 +120,19 @@ private:
     //! make toroidal helix.
     void makeToroidalHelix(void);
 
-	void displayASape(TopoDS_Shape topoDSShape);
-
 	void makeTextLabel(const char* lableText, const gp_Pnt gpPnt, Standard_Real Xoffset,
 		Standard_Real Yoffset,
 		Standard_Real Zoffset);
 
-	void removeDisplaiedAISShape();
-	void removeDisplaiedAISLables();
+	void removeDisplaiedAISLables(void);
+	
+	
+
+	TopoDS_Shape makeBoxWithInput(QString dialogBoxName);
 
 private:
     //! the exit action.
+	QAction* importBrepAction;
     QAction* mExitAction;
 
     //! the actions for the view: pan, reset, fitall.
@@ -128,6 +141,8 @@ private:
     QAction* mViewRotateAction;
     QAction* mViewResetAction;
     QAction* mViewFitallAction;
+	QAction* mViewAutoModeAction;
+	QAction* removeAllDisplaiedAction;
 
     //! the actions to test the OpenCASCADE modeling algorithms.
     QAction* mMakeBoxAction;
@@ -138,6 +153,9 @@ private:
 	QAction* camber;
 	QAction* mMakeBottle;
 	QAction* mMakeBoxWithInput;
+
+	QAction* BoxAddFillet;
+	QAction* BoxDrillHole;
 
     //! make a fillet box.
     QAction* mFilletAction;
@@ -154,6 +172,8 @@ private:
     //! helix shapes.
     QAction* myHelixAction;
 
+	QAction* firTreeAction;
+
     //! show the about info action.
     QAction* mAboutAction;
 
@@ -169,6 +189,7 @@ private:
     QToolBar* mNavigateToolBar;
     QToolBar* mPrimitiveToolBar;
     QToolBar* mModelingToolBar;
+	QToolBar* bladeModifyToolBar;
     QToolBar* mHelpToolBar;
 
     // wrapped the widget for occ.
@@ -177,6 +198,20 @@ private:
 	//vector<Handle(AIS_Shape)> handleAISShapes;
 	QVector<Handle(AIS_Shape)> handleAISShapesVector;
 	QVector<Handle(AIS_TextLabel)> handleAISLablesVector;
+
+
+private:
+	TopoDS_Shape box;
+	TopoDS_Shape filletedBox;
+	TopoDS_Shape drilledBox;
+	bool isFilletedBox;
+	bool isDrilledBox;
+	//double drillin
+
+
+
+public:
+	void displayASape(TopoDS_Shape topoDSShape);
 };
 
 #endif // OCCQT_H

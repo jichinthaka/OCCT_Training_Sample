@@ -12,7 +12,7 @@
 #include "occQt.h"
 #include "occView.h"
 
-#include <qinputdialog.h>
+//#include <qinputdialog.h>
 
 #include <QToolBar>
 #include <QTreeView>
@@ -94,6 +94,9 @@ occQt::occQt(QWidget *parent)
     createActions();
     createMenus();
     createToolBars();
+
+	isFilletedBox = false;
+	isDrilledBox = false;
 }
 
 occQt::~occQt()
@@ -103,6 +106,11 @@ occQt::~occQt()
 
 void occQt::createActions( void )
 {
+	importBrepAction = new QAction(tr("Import Brep"), this);
+	//importBrepAction->setShortcut(tr("Ctrl+Q"));
+	importBrepAction->setStatusTip(tr("Import Brep File"));
+	connect(importBrepAction, SIGNAL(triggered()), this, SLOT(importBrep()));
+
     mExitAction = new QAction(tr("Exit"), this);
     mExitAction->setShortcut(tr("Ctrl+Q"));
     mExitAction->setIcon(QIcon(":/Resources/close.png"));
@@ -133,6 +141,15 @@ void occQt::createActions( void )
     mViewFitallAction->setIcon(QIcon(":/Resources/FitAll.png"));
     mViewFitallAction->setStatusTip(tr("Fit all "));
     connect(mViewFitallAction, SIGNAL(triggered()), myOccView, SLOT(fitAll()));
+
+	mViewAutoModeAction = new QAction(tr("Auto"), this);
+	//mViewFitallAction->setIcon(QIcon(":/Resources/FitAll.png"));
+	mViewAutoModeAction->setStatusTip(tr("Auto mode "));
+	connect(mViewAutoModeAction, SIGNAL(triggered()), myOccView, SLOT(autoMode()));
+
+	removeAllDisplaiedAction = new QAction(tr("Rewmove All"), this);
+	removeAllDisplaiedAction->setStatusTip(tr("Rewmove All Displaied"));
+	connect(removeAllDisplaiedAction, SIGNAL(triggered()), this, SLOT(removeDisplaiedAISShape()));
 
     mMakeBoxAction = new QAction(tr("Box"), this);
     mMakeBoxAction->setIcon(QIcon(":/Resources/box.png"));
@@ -165,8 +182,17 @@ void occQt::createActions( void )
 
 	mMakeBoxWithInput = new QAction(tr("Box"), this);
 	mMakeBoxWithInput->setStatusTip(tr("Make a Box with inputs"));
-	connect(mMakeBoxWithInput, SIGNAL(triggered()), this, SLOT(makeBoxWithInput()));
+	connect(mMakeBoxWithInput, SIGNAL(triggered()), this, SLOT(displayBoxWithInputs()));
 
+	BoxAddFillet = new QAction(tr("Add Fillet"), this);
+	//mViewFitallAction->setIcon(QIcon(":/Resources/FitAll.png"));
+	BoxAddFillet->setStatusTip(tr("Add Fillet"));
+	connect(BoxAddFillet, SIGNAL(triggered()), this, SLOT(addBoxFillet()));
+
+	BoxDrillHole = new QAction(tr("Drill Hole"), this);
+	//mViewFitallAction->setIcon(QIcon(":/Resources/FitAll.png"));
+	BoxDrillHole->setStatusTip(tr("Drill Hole"));
+	connect(BoxDrillHole, SIGNAL(triggered()), this, SLOT(drillBoxHole()));
 
     mMakeTorusAction = new QAction(tr("Torus"), this);
     mMakeTorusAction->setStatusTip(tr("Make a torus"));
@@ -218,6 +244,10 @@ void occQt::createActions( void )
     myHelixAction->setStatusTip(tr("Make helix shapes"));
     connect(myHelixAction, SIGNAL(triggered()), this, SLOT(testHelix()));
 
+	firTreeAction = new QAction(tr("Fir Tree"), this);
+	firTreeAction->setStatusTip(tr("Set Fir Tree"));
+	connect(firTreeAction, SIGNAL(triggered()), this, SLOT(setFirTree()));
+
     mAboutAction = new QAction(tr("About"), this);
     mAboutAction->setStatusTip(tr("About the application"));
     mAboutAction->setIcon(QIcon(":/Resources/lamp.png"));
@@ -227,7 +257,12 @@ void occQt::createActions( void )
 void occQt::createMenus( void )
 {
     mFileMenu = menuBar()->addMenu(tr("&File"));
+	QMenu* ImportMenu = mFileMenu->addMenu("Import");
+	QMenu* ExportMenu = mFileMenu->addMenu("Export");
+	mFileMenu->addSeparator();
     mFileMenu->addAction(mExitAction);
+
+	ImportMenu->addAction(importBrepAction);
 
     mViewMenu = menuBar()->addMenu(tr("&View"));
     mViewMenu->addAction(mViewZoomAction);
@@ -236,6 +271,8 @@ void occQt::createMenus( void )
     mViewMenu->addSeparator();
     mViewMenu->addAction(mViewResetAction);
     mViewMenu->addAction(mViewFitallAction);
+	mViewMenu->addAction(mViewAutoModeAction);
+	//mViewMenu->addAction(removeDisplaiedAISShape);
 
     mPrimitiveMenu = menuBar()->addMenu(tr("&Primitive"));
     mPrimitiveMenu->addAction(mMakeBoxAction);
@@ -276,6 +313,8 @@ void occQt::createToolBars( void )
     mViewToolBar = addToolBar(tr("&View"));
     mViewToolBar->addAction(mViewResetAction);
     mViewToolBar->addAction(mViewFitallAction);
+	mViewToolBar->addAction(mViewAutoModeAction);
+	mViewToolBar->addAction(removeAllDisplaiedAction);
 
     mPrimitiveToolBar = addToolBar(tr("&Primitive"));
     mPrimitiveToolBar->addAction(mMakeBoxAction);
@@ -302,8 +341,36 @@ void occQt::createToolBars( void )
     mModelingToolBar->addSeparator();
     mModelingToolBar->addAction(myHelixAction);
 
+	bladeModifyToolBar = addToolBar(tr("&Blade_Modify"));
+	bladeModifyToolBar->addAction(firTreeAction);
+
     mHelpToolBar = addToolBar(tr("Help"));
     mHelpToolBar->addAction(mAboutAction);
+}
+
+#include <TopTools_HSequenceOfShape.hxx>
+#include <QFileDialog>
+#include <BRep_Builder.hxx>
+#include <BRepTools.hxx>
+void occQt::importBrep(void)
+{
+	QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"), "C:/", tr("BREP Files (*.brep)"));
+	std::string nameString= fileName.toStdString();
+	Standard_CString pathName = nameString.c_str();
+
+	TopoDS_Shape shape;
+
+	std::filebuf aFileBuf;
+	std::istream aStream(&aFileBuf);
+	if (!aFileBuf.open(pathName, ios::in))
+	{
+		return;
+	}
+
+	BRep_Builder aBuilder;
+	BRepTools::Read(shape, pathName, aBuilder);
+
+	displayASape(shape);
 }
 
 void occQt::about()
@@ -990,9 +1057,6 @@ void occQt::makeBottle()
 	Handle(Geom_CylindricalSurface) aCyl1 = new Geom_CylindricalSurface(neckAxis, BottleNeckRadius * 1.08);
 	Handle(Geom_CylindricalSurface) aCyl2 = new Geom_CylindricalSurface(neckAxis, BottleNeckRadius * 1.1);
 
-	//TopoDS_Face c = BRepBuilderAPI_MakeShape(aCyl1);
-
-	//displayASape(BRepBuilderAPI_MakeFace(aCyl1).Shape());
 
 	gp_Pnt2d aPnt(2. * M_PI, BottleNeckHight / 2.);
 	gp_Dir2d aDir(2. * M_PI, BottleNeckHight / 4.);
@@ -1075,13 +1139,13 @@ void occQt::displayASape(TopoDS_Shape topoDSShape)
 	handleAISShapesVector.append(anAis);
 }
 
-void occQt::removeDisplaiedAISShape()
+void occQt::removeDisplaiedAISShape(void)
 {
 	while (handleAISShapesVector.isEmpty() != TRUE) {
 		Handle(AIS_Shape) anAis = handleAISShapesVector.takeLast();
 		myOccView->getContext()->Remove(anAis);
-		
 	}
+	myOccView->getContext()->UpdateCurrentViewer();
 	
 }
 
@@ -1096,28 +1160,40 @@ void occQt::removeDisplaiedAISLables()
 }
 
 #include <QVBoxLayout>
-#include <QSpinBox>
+//#include <QSpinBox>
 #include <QDialogButtonBox>
 #include <QDebug>
 #include <QLabel>
+#include <QDoubleSpinBox>
+#include <QMessageBox>
 
-void occQt::makeBoxWithInput()
+TopoDS_Shape occQt::makeBoxWithInput(QString dialogBoxName)
 {
-	int boxHeight;
-	int boxLength;
-	int boxWidth;
-	QString LableText;
+	double boxHeight;
+	double boxLength;
+	double boxWidth;
+	//QString LableText;
 
 
 	QDialog * d = new QDialog();
+	d->setWindowTitle(dialogBoxName);
 	QVBoxLayout * vbox = new QVBoxLayout();
 
-	QLabel * lableLength = new QLabel("Length");
-	QSpinBox * spinBoxLength = new QSpinBox();
-	QLabel * lableWidth = new QLabel("Width");
-	QSpinBox * spinBoxWidth = new QSpinBox();
-	QLabel * lableHeight = new QLabel("Heigth");
-	QSpinBox * spinBoxHeight = new QSpinBox();
+	QLabel * lableLength = new QLabel("Length (x-Axis)  ");
+	QDoubleSpinBox * spinBoxLength = new QDoubleSpinBox();
+	spinBoxLength->setDecimals(5);
+	spinBoxLength->setSingleStep(0.00001);
+	spinBoxLength->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableWidth = new QLabel("Width (y-Axis)  ");
+	QDoubleSpinBox * spinBoxWidth = new QDoubleSpinBox();
+	spinBoxWidth->setDecimals(5);
+	spinBoxWidth->setSingleStep(0.00001);
+	spinBoxWidth->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableHeight = new QLabel("Heigth (z-Axis)  ");
+	QDoubleSpinBox * spinBoxHeight = new QDoubleSpinBox();
+	spinBoxHeight->setDecimals(5);
+	spinBoxHeight->setSingleStep(0.00001);
+	spinBoxHeight->setMaximum(std::numeric_limits<double>::infinity());
 	//QLineEdit * lineEditA = new QLineEdit();
 
 	QDialogButtonBox * buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok
@@ -1138,25 +1214,35 @@ void occQt::makeBoxWithInput()
 	d->setLayout(vbox);
 
 	int result = d->exec();
-	if (result == QDialog::Accepted)
+
+	while (true)
 	{
-		// handle values from d
-		//qDebug() << "The user clicked:"
-		//	<< "ComboBoxA" << spinBox->value()
-		//	<< "ComboBoxB" << spinBoxB->value()
-		//	<< "LineEditA" << lineEditA->text();
+		if (result == QDialog::Accepted)
+		{
+			boxLength = spinBoxLength->value();
+			boxWidth = spinBoxWidth->value();
+			boxHeight = spinBoxHeight->value();
 
-		boxLength = spinBoxLength->value();
-		boxWidth = spinBoxWidth->value();
-		boxHeight = spinBoxHeight->value();
+		}
+		else 
+		{
+			return box;
+		}
+	
+		if (boxHeight == 0 | boxLength == 0 | boxWidth == 0)
+		{
+			QMessageBox msgBox;
+			msgBox.setText("Fill All Values");
+			msgBox.setIcon(QMessageBox::Warning);
+			msgBox.exec();
+			result = d->exec();
 
+		}
+		else
+		{
+			break;
+		}
 	}
-	else 
-	{
-
-	}
-
-	//LableText = "Length = "+box
 
 	gp_Pnt point1(-boxLength, -boxWidth,0);
 	gp_Pnt point2(0, -boxWidth, 0);
@@ -1179,30 +1265,789 @@ void occQt::makeBoxWithInput()
 
 	gp_Vec prismVec(0, 0, boxHeight);
 
-	TopoDS_Shape box = BRepPrimAPI_MakePrism(bottomFace, prismVec);
+	TopoDS_Shape Box = BRepPrimAPI_MakePrism(bottomFace, prismVec);
 
+	return Box;
+}
+
+void occQt::displayBoxWithInputs()
+{
+	box = makeBoxWithInput("Create A Box");
 	displayASape(box);
 
+	//Sleep(1000);
+	//removeDisplaiedAISShape();
 
 
+	if (box.IsNull())
+		return;
+
+	mNavigateToolBar = addToolBar(tr("&Box"));
+	mNavigateToolBar->addAction(BoxAddFillet);
+	mNavigateToolBar->addAction(BoxDrillHole);
+}
 
 
+#include <QInputDialog>
+#include <GProp_GProps.hxx>
+#include <BRepGProp.hxx>
+#include <GCPnts_AbscissaPoint.hxx>
+#include <GeomAdaptor_Curve.hxx>
 
-	//TopoDS_Shape aTopoBox = BRepPrimAPI_MakeBox(boxLength, boxWidth, boxHeight).Shape();
+void occQt::addBoxFillet()
+{
+	TopoDS_Shape filletingBox = box;
 
-	//BRepTools::Write(aTopoBox, "C:/QTSample/Box.brep");
+	if (isDrilledBox & !isFilletedBox)
+	{
+		//filletedBox = drilledBox;
+		filletingBox = drilledBox;
+	}
+	else if (isFilletedBox & !isDrilledBox)
+	{
+		filletedBox = box;
+		filletingBox = box;
+	}
+	else if (isDrilledBox & isFilletedBox)
+	{
+		filletingBox = drilledBox;
+	}
 
-	//Handle(AIS_Shape) anAisBox = new AIS_Shape(aTopoBox);
+	TopExp_Explorer edgeExplorer1(filletingBox, TopAbs_EDGE);
 
-	//anAisBox->SetColor(Quantity_NOC_AZURE);
+	GProp_GProps lengthProps;
 
-	//myOccView->getContext()->Display(anAisBox);
+	double minimumLength = std::numeric_limits<double>::infinity();
+
+	while (edgeExplorer1.More())
+	{
+		TopoDS_Edge edge = TopoDS::Edge(edgeExplorer1.Current());
+		BRepGProp::LinearProperties(edge, lengthProps);
+		double length = lengthProps.Mass();
+		if (length < minimumLength)
+		{
+			minimumLength = length;
+		}
+		edgeExplorer1.Next();
+	}
+
+	bool ok;
+	double filletRadius = QInputDialog::getDouble(this, tr("Add Fillet Radius"),
+		tr("Fillet Radius :  "), 0, 0, minimumLength/2 - 0.00001, 5, &ok);
+
+	if (filletRadius == 0)
+	{
+		removeDisplaiedAISShape();
+		displayASape(box);
+		return;
+	}
+		
+
+	BRepFilletAPI_MakeFillet filletMaker(filletingBox);
+	removeDisplaiedAISShape();
+	displayASape(filletingBox);
+
+	TopExp_Explorer edgeExplorer(filletingBox, TopAbs_EDGE);
+
+	while (edgeExplorer.More())
+	{
+		TopoDS_Edge edge = TopoDS::Edge(edgeExplorer.Current());
+		filletMaker.Add(filletRadius, edge);
+		edgeExplorer.Next();
+	}
+
+	filletingBox = filletMaker.Shape();
+
+	if(!isFilletedBox & !isDrilledBox)
+	{
+		filletedBox = filletingBox;
+	}
+
+	isFilletedBox = true;
+
+	removeDisplaiedAISShape();
+	displayASape(filletingBox);
+}
+
+#include <QComboBox>
+#include <BRepAlgoAPI_Cut.hxx>
+
+void occQt::drillBoxHole()
+{
+	TopoDS_Shape drillingBox = box;
+
+	if (isDrilledBox & !isFilletedBox)
+	{
+		drilledBox = box;
+		drillingBox = box;
+	}
+	else if (isFilletedBox & !isDrilledBox)
+	{
+		drillingBox = filletedBox;
+	}
+	else if (isDrilledBox & isFilletedBox)
+	{
+		QMessageBox msgBox;
+		msgBox.setText("If you want to change the drilling of filleted & drilled one before, you have to set fillets again after changinging the fillets");
+		msgBox.setIcon(QMessageBox::Information);
+		msgBox.exec();
+		drillingBox = filletedBox;
+	}
+
+	QString selectedAxisText;
+	QString selectedHoleShape;
+	double BoxHoleRadius;
+	double BoxHoleLength;
+
+	QDialog * drillingAxisDialog = new QDialog();
+	drillingAxisDialog->setWindowTitle("Drilling Axis");
+	QVBoxLayout * vbox = new QVBoxLayout();
+
+	QLabel * lable1 = new QLabel("Select the Drilling Axis");
+	QComboBox * Axis = new QComboBox();
+	Axis->addItem("x-Axis");
+	Axis->addItem("y-Axis");
+	Axis->addItem("z-Axis");
+
+	QDialogButtonBox * buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok
+		| QDialogButtonBox::Cancel);
+
+	QObject::connect(buttonBox, SIGNAL(accepted()), drillingAxisDialog, SLOT(accept()));
+	QObject::connect(buttonBox, SIGNAL(rejected()), drillingAxisDialog, SLOT(reject()));
+
+	vbox->addWidget(lable1);
+	vbox->addWidget(Axis);
+	vbox->addWidget(buttonBox);
+
+	drillingAxisDialog->setLayout(vbox);
+
+	int result = drillingAxisDialog->exec();
+
+	if (result == QDialog::Accepted)
+	{
+		selectedAxisText = Axis->currentText();
+	}
+	else
+	{
+		return;
+	}
+
+	TopoDS_Face drillingFace;
+	gp_Ax1 drillingAxis;
+	gp_Pnt drillingFaceCenter1;
+	gp_Pnt drillingFaceCenter2;
+	bool isSelectedOneFace = false;
+
+	TopExp_Explorer faceExplorer(drillingBox, TopAbs_FACE);
+
+	GProp_GProps faceCenterGprop;
+
+	while (faceExplorer.More()) {
+		TopoDS_Face aFace = TopoDS::Face(faceExplorer.Current());
+
+		Handle(Geom_Surface) aSurface = BRep_Tool::Surface(aFace);
+		if (aSurface->DynamicType() == STANDARD_TYPE(Geom_Plane)) {
+			Handle(Geom_Plane) aPlane = Handle(Geom_Plane)::DownCast(aSurface);
+			gp_Ax1 surfaceAxis = aPlane->Axis();
 
 
+			if ((selectedAxisText == "x-Axis" & surfaceAxis.IsParallel(gp::OX(), 0))| 
+				(selectedAxisText == "y-Axis" & surfaceAxis.IsParallel(gp::OY(), 0))|
+				(selectedAxisText == "z-Axis" & surfaceAxis.IsParallel(gp::OZ(), 0)))
+			{
+				BRepGProp::SurfaceProperties(aFace, faceCenterGprop);
+				gp_Pnt faceCenter = faceCenterGprop.CentreOfMass();
 
+				drillingFace = aFace;
+				drillingAxis = surfaceAxis;
+				if (!isSelectedOneFace)
+				{
+					drillingFaceCenter1 = faceCenter;
+					isSelectedOneFace = true;
+				}
+				else
+				{
+					drillingFaceCenter2 = faceCenter;
+					break;
+				}
+			}
+		}
+		faceExplorer.Next();
+	}
+
+	gp_Vec holeVector(drillingFaceCenter1, drillingFaceCenter2);
+
+	//double maximumHoleLength = holeVector.Magnitude();
+
+	QDialog * holeRadiusDialog = new QDialog();
+	holeRadiusDialog->setWindowTitle("Hole Radius");
+	QVBoxLayout * holeRadiusVbox = new QVBoxLayout();
+
+	QLabel * holeRadiusLable = new QLabel("Hole Radius");
+	QDoubleSpinBox * spinBoxHoleRadius = new QDoubleSpinBox();
+	spinBoxHoleRadius->setDecimals(5);
+	spinBoxHoleRadius->setSingleStep(0.00001);
+	spinBoxHoleRadius->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * holelengthLabel = new QLabel("Hole Length");
+	QDoubleSpinBox * spinBoxHolelength = new QDoubleSpinBox();
+	spinBoxHolelength->setDecimals(5);
+	spinBoxHolelength->setSingleStep(0.00001);
+	spinBoxHolelength->setMaximum(std::numeric_limits<double>::infinity());
+	//spinBoxHolelength->setMaximum(maximumHoleLength);
+
+	QDialogButtonBox * holeRadiusButtonBox = new QDialogButtonBox(QDialogButtonBox::Ok
+		| QDialogButtonBox::Cancel);
+
+	QObject::connect(holeRadiusButtonBox, SIGNAL(accepted()), holeRadiusDialog, SLOT(accept()));
+	QObject::connect(holeRadiusButtonBox, SIGNAL(rejected()), holeRadiusDialog, SLOT(reject()));
+
+	holeRadiusVbox->addWidget(holeRadiusLable);
+	holeRadiusVbox->addWidget(spinBoxHoleRadius);
+	holeRadiusVbox->addWidget(holelengthLabel);
+	holeRadiusVbox->addWidget(spinBoxHolelength);
+	holeRadiusVbox->addWidget(holeRadiusButtonBox);
+
+	holeRadiusDialog->setLayout(holeRadiusVbox);
+
+
+	int result2 = holeRadiusDialog->exec();
+
+	if (result2 == QDialog::Accepted)
+	{
+		BoxHoleRadius = spinBoxHoleRadius->value();
+		BoxHoleLength = spinBoxHolelength->value();
+	}
+	else
+	{
+		return;
+	}
+
+	if (BoxHoleRadius == 0 | BoxHoleLength == 0)
+	{
+		removeDisplaiedAISShape();
+		displayASape(drillingBox);
+		return;
+	}
+		
+	gp_Dir haleDirection(holeVector);
+
+	gp_Ax2 dDrillingAxis(drillingFaceCenter1, haleDirection);
+
+	//dDrillingAxis.SetAxis(drillingAxis);
+	//dDrillingAxis.SetLocation(drillingFaceCenter1);
+	TopoDS_Shape topoCylinder = BRepPrimAPI_MakeCylinder(dDrillingAxis, BoxHoleRadius, BoxHoleLength).Shape();
+
+	removeDisplaiedAISShape();
+
+	//displayASape(topoCylinder);
+
+	drillingBox = BRepAlgoAPI_Cut(drillingBox, topoCylinder);
+
+	if (!isFilletedBox & !isDrilledBox)
+	{
+		drilledBox = drillingBox;
+	}
+
+	isDrilledBox = true;
+
+	
+	displayASape(drillingBox);
+}
+
+#include <Geom_Curve.hxx>
+#include <GeomLProp_CLProps.hxx>
+#include <BRepBuilderAPI_MakeSolid.hxx>
+
+void occQt::setFirTree()
+{
+
+	Standard_Real A1;	//angle from blade center to one hub side
+	Standard_Real A2;	//angle from blade center to next hub side
+	Standard_Real A3;	//angle from blade center to fir tree center
+
+
+	/* get the imported blade shape to the parameter shape*/
+	TopoDS_Shape shape;
+	AIS_ListOfInteractive objList;
+	myOccView->getContext()->DisplayedObjects(objList);
+	AIS_ListIteratorOfListOfInteractive iter;
+	for (iter.Initialize(objList); iter.More(); iter.Next())
+	{
+		Handle(AIS_InteractiveObject) aisShp = iter.Value();
+		if (aisShp->IsKind("AIS_Shape"))
+		{
+			shape = Handle(AIS_Shape)::DownCast(aisShp)->Shape();
+		}
+	}
+
+
+	/* get the selected face to the parameter selected face*/
+	TopoDS_Shape selectedShape;
+	myOccView->getContext()->InitSelected();
+	selectedShape = myOccView->getContext()->SelectedShape();
+	TopoDS_Face selectedFace = TopoDS::Face(selectedShape);
+
+
+	/* find what the curved edges and straight edges*/
+
+	TopExp_Explorer edgeExplorer(selectedFace, TopAbs_EDGE);
+
+	QVector<TopoDS_Edge> curvedTopoDSEdges;
+	QVector<TopoDS_Edge> straightTopoDSEdges;
+	QVector<Handle(Geom_Curve)> curvedEdges;
+	QVector<Handle(Geom_Curve)> straightEdges;
+
+	while (edgeExplorer.More())
+	{
+		TopoDS_Edge edge = TopoDS::Edge(edgeExplorer.Current());
+		bool w = edge.Convex();
+		Standard_Real first;
+		Standard_Real last;
+		Standard_Real Resolution;
+		Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, first, last);
+		GeomLProp_CLProps aCurrentCurve_Props(curve, 2, Resolution);
+		aCurrentCurve_Props.SetParameter(first);
+		//GeomLProp_CLProps aCurrentCurve_Props(curve, 1, gp::Resolution());
+		Standard_Real aCurrentCurve_Curvature = aCurrentCurve_Props.Curvature();
+
+		if (aCurrentCurve_Curvature != 0)
+		{
+			curvedTopoDSEdges.append(edge);
+			displayASape(edge);
+		}
+		else
+		{
+			straightTopoDSEdges.append(edge);
+		}
+		edgeExplorer.Next();
+	}
+
+	/* find what the longer curve edge*/
+
+	TopoDS_Edge longerCurveEdge;
+	TopoDS_Edge shoterCurveEdge;
+
+	GProp_GProps lengthProps1;
+	GProp_GProps lengthProps2;
+
+	TopoDS_Edge edge1 = curvedTopoDSEdges.at(0);
+	TopoDS_Edge edge2 = curvedTopoDSEdges.at(1);
+
+	BRepGProp::LinearProperties(edge1, lengthProps1);
+	double lengthOfEdge1 = lengthProps1.Mass();
+	BRepGProp::LinearProperties(edge2, lengthProps2);
+	double lengthOfEdge2 = lengthProps2.Mass();
+
+	double longerCurveLength;
+
+	if(lengthOfEdge1<lengthOfEdge2)
+	{
+		longerCurveEdge = edge2;
+		shoterCurveEdge = edge1;
+		longerCurveLength = lengthOfEdge2;
+	}
+	else
+	{
+		longerCurveEdge = edge1;
+		shoterCurveEdge = edge2;
+		longerCurveLength = lengthOfEdge1;
+	}
+
+	/* find the center of the longer curve*/
+	/* we get this center point as the point on both the center axis of blade
+		and  the long curve*/
+
+	gp_Pnt longerCurveCenterPoint;
+	gp_Pnt shoterCurveCenterPoint;
+
+	Standard_Real firstParameterOfLongerCurve;
+	Standard_Real lastParameterOfLongerCurve;
+	Handle(Geom_Curve) longerCurve = BRep_Tool::Curve(longerCurveEdge, firstParameterOfLongerCurve, lastParameterOfLongerCurve);
+	Standard_Real midOflonger = (firstParameterOfLongerCurve + lastParameterOfLongerCurve) / 2;
+	longerCurveCenterPoint = longerCurve->Value(midOflonger);
+
+	gp_Pnt  firstParameterPointOfLongerCurve = longerCurve->Value(firstParameterOfLongerCurve);
+
+	Standard_Real firstParameterOfShoterCurve;
+	Standard_Real lastParameterOfShoterCurve;
+	Handle(Geom_Curve) shoterCurve = BRep_Tool::Curve(shoterCurveEdge, firstParameterOfShoterCurve, lastParameterOfShoterCurve);
+	Standard_Real midOfShoter = (firstParameterOfShoterCurve + lastParameterOfShoterCurve) / 2;
+	shoterCurveCenterPoint = shoterCurve->Value(midOfShoter);
+
+	/* use this center line length to get dimention of fire tree as a frantion (for hard coddings)*/
+	Standard_Real CenterLineLength = longerCurveCenterPoint.Distance(shoterCurveCenterPoint);
+
+	/* get the rotating axis as the faceCenterAxis*/
+	gp_Pnt rotatingAxisPoint(0, 0, longerCurveCenterPoint.Z());
+
+	gp_Vec faceCenterVector(longerCurveCenterPoint, rotatingAxisPoint);
+
+	gp_Dir faceCenterDirection(faceCenterVector);
+
+	gp_Ax1 faceCenterAxis(longerCurveCenterPoint, faceCenterDirection);
+
+
+	gp_Dir zDir(0, 0, 1);
+	gp_Ax1 rotatingAxis(rotatingAxisPoint, zDir);
+	gp_Trsf A1Transformation;
+	A1Transformation.SetRotation(rotatingAxis, A1);
+
+
+	gp_Vec faceCenterUnitVector = faceCenterVector.Divided(CenterLineLength);
+
+	TopoDS_Edge hubBottomCurveEdge;
+
+	Standard_Real hubThickness = CenterLineLength * 0.2;
+
+	TopoDS_Shape trnsFormingEdge = longerCurveEdge;
+
+	gp_Trsf theTransformation;
+	gp_Vec centerUnitVector(faceCenterDirection);
+	theTransformation.SetTranslation(centerUnitVector.Multiplied(hubThickness));
+	BRepBuilderAPI_Transform myBRepTransformation(trnsFormingEdge, theTransformation, true);
+
+	TopoDS_Shape hubBottomCurveShape = myBRepTransformation.Shape();
+
+	hubBottomCurveEdge = TopoDS::Edge(hubBottomCurveShape);
+
+	//displayASape(hubBottomCurveEdge);
+
+	//removeDisplaiedAISShape();
+
+	//displayASape(hubBottomCurveEdge);
+
+	Standard_Real firstParameterOfHabBottemCurve;
+	Standard_Real lastParameterOfHabBottemCurve;
+	Handle(Geom_Curve) hubBottomCurve = BRep_Tool::Curve(hubBottomCurveEdge, firstParameterOfHabBottemCurve, lastParameterOfHabBottemCurve);
+	
+	//gp_Pnt pt1 = hubBottomCurve->Value(firstParameterOfHabBottemCurve);
+	//gp_Pnt pt2 = hubBottomCurve->Value(lastParameterOfHabBottemCurve);
+
+
+	//displayASape(BRepBuilderAPI_MakeEdge(hubBottomCurve).Edge());
+	
+	Standard_Real midParameterOfHabBottemCurve = (firstParameterOfHabBottemCurve + lastParameterOfHabBottemCurve) / 2;
+
+	Standard_Real diference =( midParameterOfHabBottemCurve - firstParameterOfHabBottemCurve);
+
+	Standard_Real U3 = midParameterOfHabBottemCurve - (lastParameterOfHabBottemCurve * 0.1);
+
+	
+	//toolUperHalfLine.SetTrim(firstParameterOfHabBottemCurve, midParameterOfHabBottemCurve);
+
+	Handle(Geom_Curve) toolUperHalfLineCurve =new Geom_TrimmedCurve (hubBottomCurve, firstParameterOfHabBottemCurve, U3);
+
+	TopoDS_Edge aEdge1 = BRepBuilderAPI_MakeEdge(toolUperHalfLineCurve);
+	//removeDisplaiedAISShape();
+	//displayASape(aEdge1);
+
+	gp_Pnt neckStartPoint = toolUperHalfLineCurve->Value(U3);
+
+	
+
+	Standard_Real neckHeight = CenterLineLength * 0.2;
+
+	gp_Trsf theTransformationNeckPoint;
+	//gp_Vec centerUnitVector(faceCenterDirection);
+	theTransformationNeckPoint.SetTranslation(centerUnitVector.Multiplied(neckHeight));
+
+	gp_Pnt neckEndPoint = neckStartPoint.Transformed(theTransformationNeckPoint);
+	
+	Handle(Geom_TrimmedCurve) neckLineCurve = GC_MakeSegment(neckStartPoint, neckEndPoint);
+
+	TopoDS_Edge aEdge2 = BRepBuilderAPI_MakeEdge(neckLineCurve);
+	//removeDisplaiedAISShape();
+	//displayASape(aEdge2);
+
+	QVector<TopoDS_Edge> firstHalfEdges;
+	firstHalfEdges.append(aEdge1);
+	firstHalfEdges.append(aEdge2);
+
+
+	gp_Pnt lastAngle_2_LastPoint;
+
+	gp_Pnt Angle_1_FirstPoint = neckEndPoint;
+
+	for (int i = 0; i < 3; i++)
+	{
+		Standard_Real angleLength = CenterLineLength * (0.9 - (0.15*i));
+
+		gp_Trsf theTransformationAngle_1_Point;
+		//gp_Vec centerUnitVector(faceCenterDirection);
+		theTransformationAngle_1_Point.SetTranslation(centerUnitVector.Multiplied(angleLength));
+
+		gp_Pnt angleLastPointBefore = Angle_1_FirstPoint.Transformed(theTransformationAngle_1_Point);
+
+		//gp_Pnt aOrigin(0, 0, 0);
+		gp_Dir zDir(0, 0, 1);
+		gp_Ax1 neckEndPointAxis(Angle_1_FirstPoint, zDir);
+
+		gp_Pnt angle_1_LastPoint = angleLastPointBefore.Rotated(neckEndPointAxis, ((3.141 * 2.5) / 6));
+
+		Handle(Geom_TrimmedCurve) angle_1_Curve = GC_MakeSegment(Angle_1_FirstPoint, angle_1_LastPoint);
+
+		TopoDS_Edge aEdge3 = BRepBuilderAPI_MakeEdge(angle_1_Curve);
+
+		firstHalfEdges.append(aEdge3);
+
+		//removeDisplaiedAISShape();
+		//displayASape(aEdge3);
+
+		Standard_Real angleThickness = CenterLineLength * 0.2;
+
+		gp_Trsf theTransformationAngle_2_Point;
+		theTransformationAngle_2_Point.SetTranslation(centerUnitVector.Multiplied(angleThickness));
+
+		gp_Pnt angle_2_LastPoint = Angle_1_FirstPoint.Transformed(theTransformationAngle_2_Point);
+
+		Handle(Geom_TrimmedCurve) angle_2_Curve = GC_MakeSegment(angle_1_LastPoint, angle_2_LastPoint);
+
+		TopoDS_Edge aEdge4 = BRepBuilderAPI_MakeEdge(angle_2_Curve);
+
+		firstHalfEdges.append(aEdge4);
+
+		//removeDisplaiedAISShape();
+		//displayASape(aEdge4);
+
+		lastAngle_2_LastPoint = angle_2_LastPoint;
+		Angle_1_FirstPoint = lastAngle_2_LastPoint;
+
+	}
+	//////////////////////////////////////
+	Standard_Real firTreeHeight = CenterLineLength * 0.9;
+
+	gp_Trsf theTransformationMidBottomPoint;
+	theTransformationMidBottomPoint.SetTranslation(centerUnitVector.Multiplied(firTreeHeight));
+
+	//gp_Pnt MidBottomPointPoint = longerCurveCenterPoint.Transformed(theTransformationMidBottomPoint);
+	gp_Pnt MidBottomPointPoint(longerCurveCenterPoint.X(), lastAngle_2_LastPoint.Y(), longerCurveCenterPoint.Z());
+
+	Handle(Geom_TrimmedCurve) centerConnectCurve = GC_MakeSegment(lastAngle_2_LastPoint, MidBottomPointPoint);
+
+	TopoDS_Edge aEdge5 = BRepBuilderAPI_MakeEdge(centerConnectCurve);
+	firstHalfEdges.append(aEdge5);
+
+	//displayASape(aEdge5);
+
+	//Standard_Real firTreeHeight = CenterLineLength * 0.9;
+
+	gp_Trsf theTransformationToolMidBottomPoint;
+	theTransformationToolMidBottomPoint.SetTranslation(centerUnitVector.Multiplied(CenterLineLength*2));
+
+	gp_Pnt toolMiddBottomPoint = longerCurveCenterPoint.Transformed(theTransformationToolMidBottomPoint);
+
+	//Handle(Geom_TrimmedCurve) centerLastCurve = GC_MakeSegment(MidBottomPointPoint, toolMiddBottomPoint);
+
+	//TopoDS_Edge aEdge6 = BRepBuilderAPI_MakeEdge(centerLastCurve);
+	//displayASape(aEdge6);
+
+	gp_Pnt toolUpperHalfLineOuterCurve = toolUperHalfLineCurve->Value(firstParameterOfHabBottemCurve);
+
+	gp_Pnt toolLastPoint(toolUpperHalfLineOuterCurve.X(), toolMiddBottomPoint.Y(), toolUpperHalfLineOuterCurve.Z());
+
+	Handle(Geom_TrimmedCurve) toolbottomCurve = GC_MakeSegment(toolMiddBottomPoint, toolLastPoint);
+
+	TopoDS_Edge aEdge6 = BRepBuilderAPI_MakeEdge(toolbottomCurve);
+
+	
+	//displayASape(aEdge6);
+
+	Handle(Geom_TrimmedCurve) toolSideCurve = GC_MakeSegment(toolLastPoint, toolUpperHalfLineOuterCurve);
+
+	TopoDS_Edge aEdge7 = BRepBuilderAPI_MakeEdge(toolSideCurve);
+
+	firstHalfEdges.insert(0, aEdge7);
+	firstHalfEdges.insert(0, aEdge6);
+
+
+	BRepBuilderAPI_MakeWire wireMaker1;
+
+	for (int i = 0; i < firstHalfEdges.length();i++)
+	{
+		wireMaker1.Add(firstHalfEdges.at(i));
+	}
+
+	
+
+	TopoDS_Wire halfWireProfile = wireMaker1.Wire();
+	//displayASape(aEdge7);
+
+	
+
+	//removeDisplaiedAISShape();
+	//displayASape(halfWireProfile);
+
+	gp_Trsf aTrsf;
+	aTrsf.SetMirror(faceCenterAxis);
+	BRepBuilderAPI_Transform aBRepTrsf(halfWireProfile, aTrsf);
+	TopoDS_Shape aMirroredShape = aBRepTrsf.Shape();
+	TopoDS_Wire aMirroredWire = TopoDS::Wire(aMirroredShape);
+
+	//displayASape(aMirroredWire);
+
+
+	//gp_Pnt pt = longerCurveCenterPoint;
+	//pt.Translate(gp_Vec(faceCenterDirection) * 30);
+
+	//displayASape(BRepBuilderAPI_MakeEdge(longerCurveCenterPoint, pt).Edge());
+	BRepBuilderAPI_MakeWire mkWire(aMirroredWire);
+	mkWire.Add(halfWireProfile);
+	TopoDS_Wire WireProfile = mkWire.Wire();
+
+	//removeDisplaiedAISShape();
+	//displayASape(WireProfile);
+
+	TopoDS_Face myFaceProfile = BRepBuilderAPI_MakeFace(WireProfile);
+
+	//removeDisplaiedAISShape();
+	//displayASape(myFaceProfile);
+
+	gp_Vec aPrismVec(0, 0, -50);
+
+	TopoDS_Shape cuttingToolBody = BRepPrimAPI_MakePrism(myFaceProfile, aPrismVec);
+
+	//removeDisplaiedAISShape();
+	//displayASape(cuttingToolBody);
+
+	TopoDS_Shell shell = TopoDS::Shell(shape);
+
+	shape = BRepBuilderAPI_MakeSolid(shell);
+
+	shape = BRepAlgoAPI_Cut(shape, cuttingToolBody);
+
+	removeDisplaiedAISShape();
+	displayASape(shape);
+
+
+	//for (int i = 0; i < 2; i++)
+	//{
 
 }
 
 
 
 
+	
+	/*
+
+	QDialog * d = new QDialog();
+	d->setWindowTitle("Enter Fir Tree Data");
+	QVBoxLayout * vbox = new QVBoxLayout();
+
+	QLabel * lableinterceptA = new QLabel("Intercept A  ");
+	QDoubleSpinBox * spinBoxInterceptA = new QDoubleSpinBox();
+	spinBoxInterceptA->setDecimals(5);
+	spinBoxInterceptA->setSingleStep(0.00001);
+	spinBoxInterceptA->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableSlopB = new QLabel("Slop B  ");
+	QDoubleSpinBox * spinBoxSlopB = new QDoubleSpinBox();
+	spinBoxSlopB->setDecimals(5);
+	spinBoxSlopB->setSingleStep(0.00001);
+	spinBoxSlopB->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableInterceptC = new QLabel("Intercept C  ");
+	QDoubleSpinBox * spinBoxInterceptC = new QDoubleSpinBox();
+	spinBoxInterceptC->setDecimals(5);
+	spinBoxInterceptC->setSingleStep(0.00001);
+	spinBoxInterceptC->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableSlopD = new QLabel("Slop D  ");
+	QDoubleSpinBox * spinBoxSlopD = new QDoubleSpinBox();
+	spinBoxSlopD->setDecimals(5);
+	spinBoxSlopD->setSingleStep(0.00001);
+	spinBoxSlopD->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableNeckE = new QLabel("Neck E  ");
+	QDoubleSpinBox * spinBoxNeckE = new QDoubleSpinBox();
+	spinBoxNeckE->setDecimals(5);
+	spinBoxNeckE->setSingleStep(0.00001);
+	spinBoxNeckE->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableRadiusA1 = new QLabel("Radius A1  ");
+	QDoubleSpinBox * spinBoxRadiusA1 = new QDoubleSpinBox();
+	spinBoxRadiusA1->setDecimals(5);
+	spinBoxRadiusA1->setSingleStep(0.00001);
+	spinBoxRadiusA1->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableRadiusB1 = new QLabel("Radius B1  ");
+	QDoubleSpinBox * spinBoxRadiusB1 = new QDoubleSpinBox();
+	spinBoxRadiusB1->setDecimals(5);
+	spinBoxRadiusB1->setSingleStep(0.00001);
+	spinBoxRadiusB1->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableAngleC1 = new QLabel("Angle C1  ");
+	QDoubleSpinBox * spinBoxAngleC1 = new QDoubleSpinBox();
+	spinBoxAngleC1->setDecimals(5);
+	spinBoxAngleC1->setSingleStep(0.00001);
+	spinBoxAngleC1->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableAngleD1 = new QLabel("Angle D1  ");
+	QDoubleSpinBox * spinBoxAngleD1 = new QDoubleSpinBox();
+	spinBoxAngleD1->setDecimals(5);
+	spinBoxAngleD1->setSingleStep(0.00001);
+	spinBoxAngleD1->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableRadiusA2 = new QLabel("Radius A2  ");
+	QDoubleSpinBox * spinBoxRadiusA2 = new QDoubleSpinBox();
+	spinBoxRadiusA2->setDecimals(5);
+	spinBoxRadiusA2->setSingleStep(0.00001);
+	spinBoxRadiusA2->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableRadiusB2 = new QLabel("Radius B2  ");
+	QDoubleSpinBox * spinBoxRadiusB2 = new QDoubleSpinBox();
+	spinBoxRadiusB2->setDecimals(5);
+	spinBoxRadiusB2->setSingleStep(0.00001);
+	spinBoxRadiusB2->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableAngleC2 = new QLabel("Angle C2  ");
+	QDoubleSpinBox * spinBoxAngleC2 = new QDoubleSpinBox();
+	spinBoxAngleC2->setDecimals(5);
+	spinBoxAngleC2->setSingleStep(0.00001);
+	spinBoxAngleC2->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableAngleD2 = new QLabel("Angle D2  ");
+	QDoubleSpinBox * spinBoxAngleD2 = new QDoubleSpinBox();
+	spinBoxAngleD2->setDecimals(5);
+	spinBoxAngleD2->setSingleStep(0.00001);
+	spinBoxAngleD2->setMaximum(std::numeric_limits<double>::infinity());
+	QLabel * lableBacePosition = new QLabel("Base Position  ");
+	QDoubleSpinBox * spinBoxBacePosition = new QDoubleSpinBox();
+	spinBoxBacePosition->setDecimals(5);
+	spinBoxBacePosition->setSingleStep(0.00001);
+	spinBoxBacePosition->setMaximum(std::numeric_limits<double>::infinity());
+	//QLineEdit * lineEditA = new QLineEdit();
+
+	QDialogButtonBox * buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok
+		| QDialogButtonBox::Cancel);
+
+	QObject::connect(buttonBox, SIGNAL(accepted()), d, SLOT(accept()));
+	QObject::connect(buttonBox, SIGNAL(rejected()), d, SLOT(reject()));
+
+	vbox->addWidget(lableinterceptA);
+	vbox->addWidget(lableSlopB);
+	vbox->addWidget(lableInterceptC);
+	vbox->addWidget(lableSlopD);
+	vbox->addWidget(lableNeckE);
+	vbox->addWidget(lableRadiusA1);
+	vbox->addWidget(lableRadiusB1);
+	vbox->addWidget(lableAngleC1);
+	vbox->addWidget(lableAngleD1);
+	vbox->addWidget(lableRadiusA2);
+	vbox->addWidget(lableRadiusB2);
+	vbox->addWidget(lableAngleC2);
+	vbox->addWidget(lableAngleD2);
+	vbox->addWidget(lableBacePosition);
+	
+	vbox->addWidget(buttonBox);
+
+	d->setLayout(vbox);
+
+	int result = d->exec();
+
+	while (true)
+	{
+		if (result == QDialog::Accepted)
+		{
+			//boxLength = spinBoxLength->value();
+			//boxWidth = spinBoxWidth->value();
+			//boxHeight = spinBoxHeight->value();
+
+		}
+		else
+		{
+			return;
+		}
+	}
+
+	*/
+
+//}

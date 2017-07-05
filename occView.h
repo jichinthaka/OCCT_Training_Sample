@@ -16,6 +16,7 @@
 #include <QGLWidget>
 
 #include <AIS_InteractiveContext.hxx>
+#include <TopoDS_Shape.hxx>
 
 class QMenu;
 class QRubberBand;
@@ -34,7 +35,8 @@ public:
         CurAction3d_WindowZooming,
         CurAction3d_DynamicPanning,
         CurAction3d_GlobalPanning,
-        CurAction3d_DynamicRotation
+        CurAction3d_DynamicRotation,
+		CurAction3d_autoMode
     };
 
 public:
@@ -43,16 +45,22 @@ public:
 
     const Handle_AIS_InteractiveContext getContext() const;
 
+	Handle(AIS_InteractiveObject) getSelectedShape(void);
+
 signals:
     void selectionChanged(void);
 
 public slots:
+
+	
+
     //! operations for the view.
     void pan(void);
     void fitAll(void);
     void reset(void);
     void zoom(void);
     void rotate(void);
+	void autoMode(void);
 
 protected:
     // Paint events.
@@ -64,6 +72,8 @@ protected:
     virtual void mouseReleaseEvent(QMouseEvent* e);
     virtual void mouseMoveEvent(QMouseEvent * e);
     virtual void wheelEvent(QWheelEvent * e);
+	virtual void keyPressEvent(QKeyEvent *e);
+	virtual void keyReleaseEvent(QKeyEvent *e);
 
     // Button events.
     virtual void onLButtonDown(const int theFlags, const QPoint thePoint);
@@ -110,11 +120,19 @@ private:
     //! the mouse current mode.
     CurrentAction3d myCurrentMode;
 
+	CurrentAction3d autoModeEvent;
+
     //! save the degenerate mode state.
     Standard_Boolean myDegenerateModeIsOn;
 
     //! rubber rectangle for the mouse selection.
     QRubberBand* myRectBand;
+
+	Handle(AIS_InteractiveObject) selectedShape;
+
+
+protected:
+//	CColoredShapes* m_pcoloredshapeList;
 
 };
 

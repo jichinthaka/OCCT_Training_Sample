@@ -11,6 +11,8 @@
 
 // Moved the #include <OpenGl_GraphicsDriver.hxx> 
 // and added 9 #undef lines to get to build in Linux
+#include "occQt.h"
+
 #include <OpenGl_GraphicDriver.hxx>
 #undef Bool
 #undef CursorShape
@@ -23,6 +25,7 @@
 #undef Expose
 
 #include "occView.h"
+#include "occQt.h"
 
 #include <QMenu>
 #include <QMouseEvent>
@@ -34,6 +37,13 @@
 
 #include <Aspect_Handle.hxx>
 #include <Aspect_DisplayConnection.hxx>
+
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QSpinBox>
+#include <QDialogButtonBox>
+#include <QDebug>
+#include <QLabel>
 
 #ifdef WNT
   #include <WNT_Window.hxx>
@@ -70,6 +80,8 @@ OccView::OccView(QWidget* parent )
 
     // Enable the mouse tracking, by default the mouse tracking is disabled.
     setMouseTracking( true );
+
+	this->setFocusPolicy(Qt::WheelFocus);
 
 }
 
@@ -117,6 +129,12 @@ void OccView::init()
     myView->TriedronDisplay(Aspect_TOTP_LEFT_LOWER, Quantity_NOC_GOLD, 0.08, V3d_ZBUFFER);
 
     myContext->SetDisplayMode(AIS_Shaded);
+
+	myContext->CloseAllContexts();
+	myContext->OpenLocalContext();
+	myContext->ActivateStandardMode(TopAbs_FACE);
+
+	//myContext->SetColor()
 }
 
 const Handle_AIS_InteractiveContext OccView::getContext() const
@@ -147,6 +165,7 @@ void OccView::resizeEvent( QResizeEvent* e )
     }
 }
 
+
 void OccView::fitAll( void )
 {
     myView->FitAll();
@@ -172,6 +191,37 @@ void OccView::zoom( void )
 void OccView::rotate( void )
 {
     myCurrentMode = CurAction3d_DynamicRotation;
+}
+
+
+
+void OccView::autoMode(void)
+{
+	myCurrentMode = CurAction3d_autoMode;
+
+
+	QDialog * d = new QDialog();
+	QVBoxLayout * vbox = new QVBoxLayout();
+
+	QLabel * lable1 = new QLabel("Rotating ------ Ctrl + Mouse MiddleButton");
+	QLabel * lable2 = new QLabel("Rotating ------ Shift + Mouse MiddleButton");
+	QLabel * lable3 = new QLabel("Zooming ------- Mouse Scrolling");
+	//QLineEdit * lineEditA = new QLineEdit();
+
+	QDialogButtonBox * buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok);
+
+	QObject::connect(buttonBox, SIGNAL(accepted()), d, SLOT(accept()));
+
+
+	vbox->addWidget(lable1);
+	vbox->addWidget(lable2);
+	vbox->addWidget(lable3);
+	vbox->addWidget(buttonBox);
+
+	d->setLayout(vbox);
+
+	d->exec();
+	return;
 }
 
 
@@ -210,6 +260,30 @@ void OccView::mouseReleaseEvent( QMouseEvent* e )
 void OccView::mouseMoveEvent( QMouseEvent * e )
 {
     onMouseMove(e->buttons(), e->pos());
+}
+
+void OccView::keyPressEvent(QKeyEvent *e)
+{
+	if (e->key() == Qt::Key_Control)
+	{
+		myCurrentMode = CurAction3d_DynamicRotation;
+	}
+	else if (e->key() == Qt::Key_Shift)
+	{
+		myCurrentMode = CurAction3d_DynamicPanning;
+	}
+}
+
+void OccView::keyReleaseEvent(QKeyEvent *e)
+{
+	if (e->key() == Qt::Key_Control)
+	{
+		myCurrentMode = CurAction3d_autoMode;
+	}
+	else if (e->key() == Qt::Key_Shift)
+	{
+		myCurrentMode = CurAction3d_autoMode;
+	}
 }
 
 void OccView::wheelEvent( QWheelEvent * e )
@@ -303,6 +377,8 @@ void OccView::onLButtonUp( const int theFlags, const QPoint thePoint )
         else
         {
             inputEvent(thePoint.x(), thePoint.y());
+			//myContext->InitSelected();
+			//selectedShape = myContext->SelectedInteractive();
         }
     }
 
@@ -451,4 +527,9 @@ void OccView::panByMiddleButton( const QPoint& thePoint )
     aCenterY = aSize.height() / 2;
 
     myView->Pan(aCenterX - thePoint.x(), thePoint.y() - aCenterY);
+}
+
+Handle(AIS_InteractiveObject) OccView::getSelectedShape()
+{
+	return selectedShape;
 }
