@@ -1920,12 +1920,27 @@ void occQt::setFirTree()
 
 }
 
+#include <GeomLib_Tool.hxx>
 void occQt::setFirTree2()
 {
+	/* these are my inputs. hard coded just for now*/
+	Standard_Real A1 = (3.141 * 1.3) / 6;	//angle from blade center to one hub side
+	Standard_Real A2 = (3.141 * 1) / 6;		//angle from blade center to next hub side
+	Standard_Real A3 = 0; //(3.141 * 0.5) / 6;	//angle from blade center to fir tree center
 
-	Standard_Real A1;	//angle from blade center to one hub side
-	Standard_Real A2;	//angle from blade center to next hub side
-	Standard_Real A3;	//angle from blade center to fir tree center
+	Standard_Real A4 = (3.141 * 0.5) / 15;	//just for now, assume Neck Thickness by an angle
+
+	gp_Pnt bladeCenterPointOnHubSerface;	//asume it is the selected face longer curve center 
+	Standard_Real hubThickness;
+	Standard_Real neckHeight;	//just hard coded as a fraction of selected face center line length
+	Standard_Real LobeLoadLength;	//this is the first firtree upper angle length
+							//get it as a fraction of selected face center line length
+							//other other angle lengths are redusing fraction of this
+	Standard_Real LobeThickness;	//get it as a fraction of selected face center line length
+							 //other other angle lengths are redusing fraction of this
+
+
+
 
 	/* get the imported blade shape to the parameter shape*/
 	TopoDS_Shape shape;
@@ -1942,7 +1957,7 @@ void occQt::setFirTree2()
 	}
 
 
-	/* get the selected face to the parameter selected face*/
+	/* get the selected face to the parameter selectedFace*/
 	TopoDS_Shape selectedShape;
 	myOccView->getContext()->InitSelected();
 	selectedShape = myOccView->getContext()->SelectedShape();
@@ -1968,7 +1983,6 @@ void occQt::setFirTree2()
 		Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, first, last);
 		GeomLProp_CLProps aCurrentCurve_Props(curve, 2, Resolution);
 		aCurrentCurve_Props.SetParameter(first);
-		//GeomLProp_CLProps aCurrentCurve_Props(curve, 1, gp::Resolution());
 		Standard_Real aCurrentCurve_Curvature = aCurrentCurve_Props.Curvature();
 
 		if (aCurrentCurve_Curvature != 0)
@@ -2018,16 +2032,29 @@ void occQt::setFirTree2()
 	/* we get this center point as the point on both the center axis of blade
 	and  the long curve*/
 
+	removeDisplaiedAISShape();
+	displayASape(longerCurveEdge);
+
 	gp_Pnt longerCurveCenterPoint;
 	gp_Pnt shoterCurveCenterPoint;
 
 	Standard_Real firstParameterOfLongerCurve;
 	Standard_Real lastParameterOfLongerCurve;
 	Handle(Geom_Curve) longerCurve = BRep_Tool::Curve(longerCurveEdge, firstParameterOfLongerCurve, lastParameterOfLongerCurve);
-	Standard_Real midOflonger = (firstParameterOfLongerCurve + lastParameterOfLongerCurve) / 2;
-	longerCurveCenterPoint = longerCurve->Value(midOflonger);
+	Standard_Real midParameterOflongercurve = (firstParameterOfLongerCurve + lastParameterOfLongerCurve) / 2;
+	longerCurveCenterPoint = longerCurve->Value(midParameterOflongercurve);
 
-	gp_Pnt  firstParameterPointOfLongerCurve = longerCurve->Value(firstParameterOfLongerCurve);
+	gp_Pnt firstParameterPointOfLongerCurve = longerCurve->Value(firstParameterOfLongerCurve);
+	gp_Pnt lastParameterPointOfLongerCurve = longerCurve->Value(lastParameterOfLongerCurve);
+
+	TopoDS_Shape topoDSVertexShape0 = BRepBuilderAPI_MakeVertex(longerCurveCenterPoint);
+	displayASape(topoDSVertexShape0);
+
+	bladeCenterPointOnHubSerface = longerCurveCenterPoint;  // just for hard code because don't know the blade center
+
+//	gp_Pnt  firstParameterPointOfLongerCurve = longerCurve->Value(firstParameterOfLongerCurve);
+
+	/* find the center of the shoter curve*/
 
 	Standard_Real firstParameterOfShoterCurve;
 	Standard_Real lastParameterOfShoterCurve;
@@ -2035,41 +2062,316 @@ void occQt::setFirTree2()
 	Standard_Real midOfShoter = (firstParameterOfShoterCurve + lastParameterOfShoterCurve) / 2;
 	shoterCurveCenterPoint = shoterCurve->Value(midOfShoter);
 
-	/* use this center line length to get dimention of fire tree as a frantion (for hard coddings)*/
+
+	/* use this center line length to get dimention of fire tree as a frantion (for hard coddings) and 
+		to get it as the side line length of given shape*/
 	Standard_Real CenterLineLength = longerCurveCenterPoint.Distance(shoterCurveCenterPoint);
 
-	/* get the rotating axis as the faceCenterAxis*/
-	gp_Pnt rotatingAxisPoint(0, 0, longerCurveCenterPoint.Z());
+	
+	gp_Pnt rotatingAxisPointForSelectedPlane(0, 0, longerCurveCenterPoint.Z());
 
-	gp_Vec faceCenterVector(longerCurveCenterPoint, rotatingAxisPoint);
+	/* get the selected face center line vector from longerCurve to rotating point as bladeCenterLineVector*/
+	gp_Vec faceCenterLineVector(longerCurveCenterPoint, rotatingAxisPointForSelectedPlane);
 
-	gp_Dir faceCenterDirection(faceCenterVector);
+	gp_Vec firstParameterOfLongerCurveToZAxisVector(firstParameterPointOfLongerCurve, rotatingAxisPointForSelectedPlane);
+	gp_Dir firstParameterOfLongerCurveToZAxis_Direction(firstParameterOfLongerCurveToZAxisVector);
+	gp_Vec firstParameterOfLongerCurveToZAxis_UnitVector(firstParameterOfLongerCurveToZAxis_Direction);
 
-	gp_Ax1 faceCenterAxis(longerCurveCenterPoint, faceCenterDirection);
+	gp_Vec lastParameterOfLongerCurveToZAxisVector(lastParameterPointOfLongerCurve, rotatingAxisPointForSelectedPlane);
+	gp_Dir lastParameterOfLongerCurveToZAxis_Direction(lastParameterOfLongerCurveToZAxisVector);
+	gp_Vec lastParameterOfLongerCurveToZAxis_UnitVector(lastParameterOfLongerCurveToZAxis_Direction);
+
+	/* get the blade center line vector from longerCurve to rotating point as bladeCenterLineVector*/
+	gp_Vec bladeCenterLineVector(bladeCenterPointOnHubSerface, rotatingAxisPointForSelectedPlane);
+
+	gp_Dir bladeCenterLineVectorDirection(bladeCenterLineVector);
+
+	//gp_Ax1 faceCenterAxis(longerCurveCenterPoint, faceCenterLineVector);
 
 
 	gp_Dir zDir(0, 0, 1);
-	gp_Ax1 rotatingAxis(rotatingAxisPoint, zDir);
-	gp_Trsf A1Transformation;
-	A1Transformation.SetRotation(rotatingAxis, A1);
+	gp_Ax1 rotatingAxis(rotatingAxisPointForSelectedPlane, zDir);
+	gp_Ax2 rotatingAxis2(rotatingAxisPointForSelectedPlane, zDir);
+
+	Standard_Real bladeCenterToFirstParameterPointAngle = qAbs(bladeCenterLineVector.Angle(firstParameterOfLongerCurveToZAxisVector));
+	Standard_Real bladeCenterToLastParameterPointAngle = qAbs(bladeCenterLineVector.Angle(lastParameterOfLongerCurveToZAxisVector));
 
 
-	gp_Vec faceCenterUnitVector = faceCenterVector.Divided(CenterLineLength);
+	/* get the cutting edge point on longercuve by A1 angle*/
+	//gp_Trsf A1Transformation;
+	//A1Transformation.SetRotation(rotatingAxis, A1);
+	//Standard_Real parameterByA1_AngleFromBladeCenterLine= longerCurve->TransformedParameter(midParameterOflongercurve, A1Transformation);
+	gp_Pnt pointOnLongerCurveByA1_AngleFromBladeCenterLine = bladeCenterPointOnHubSerface.Rotated(rotatingAxis, A1);
+	Standard_Real parameterByA1_AngleFromBladeCenterLine;
+	GeomLib_Tool::Parameter(longerCurve, pointOnLongerCurveByA1_AngleFromBladeCenterLine, 1e-7, parameterByA1_AngleFromBladeCenterLine);
+	gp_Vec pointOnLongerCurveByA1ToZAxisVector(pointOnLongerCurveByA1_AngleFromBladeCenterLine, rotatingAxisPointForSelectedPlane);
 
-	TopoDS_Edge hubBottomCurveEdge;
+	//TopoDS_Shape topoDSVertexShape01 = BRepBuilderAPI_MakeVertex(pointOnLongerCurveByA1_AngleFromBladeCenterLine);
+	//displayASape(topoDSVertexShape01);
 
-	Standard_Real hubThickness = CenterLineLength * 0.2;
+	//gp_Pnt pointByA1 = pointOnLongerCurveByA1_AngleFromBladeCenterLine;
 
-	TopoDS_Shape trnsFormingEdge = longerCurveEdge;
+	/* get the cutting edge point on longercuve by A2 angle for next side*/
+	//gp_Trsf A2Transformation;
+	//A2Transformation.SetRotation(rotatingAxis, -A2);
+	//Standard_Real parameterByA2_AngleFromBladeCenterLine = longerCurve->TransformedParameter(midParameterOflongercurve, A2Transformation);
+	gp_Pnt pointOnLongerCurveByA2_AngleFromBladeCenterLine = bladeCenterPointOnHubSerface.Rotated(rotatingAxis, -A2);
+	Standard_Real parameterByA2_AngleFromBladeCenterLine;
+	GeomLib_Tool::Parameter(longerCurve, pointOnLongerCurveByA2_AngleFromBladeCenterLine, 1e-7, parameterByA2_AngleFromBladeCenterLine);
+	gp_Vec pointOnLongerCurveByA2ToZAxisVector(pointOnLongerCurveByA2_AngleFromBladeCenterLine, rotatingAxisPointForSelectedPlane);
 
-	gp_Trsf theTransformation;
-	gp_Vec centerUnitVector(faceCenterDirection);
-	theTransformation.SetTranslation(centerUnitVector.Multiplied(hubThickness));
-	BRepBuilderAPI_Transform myBRepTransformation(trnsFormingEdge, theTransformation, true);
+	//TopoDS_Shape topoDSVertexShape02 = BRepBuilderAPI_MakeVertex(pointOnLongerCurveByA2_AngleFromBladeCenterLine);
+	//displayASape(topoDSVertexShape02);
 
-	TopoDS_Shape hubBottomCurveShape = myBRepTransformation.Shape();
+	//gp_Pnt pointByA2 = pointOnLongerCurveByA2_AngleFromBladeCenterLine;
 
-	hubBottomCurveEdge = TopoDS::Edge(hubBottomCurveShape);
+
+	/* what is near to the firstParameterOfLongerCurve from parameterByA1_AngleFromBladeCenterLine 
+		and parameterByA2_AngleFromBladeCenterLine*/
+	gp_Pnt firstParameterSideLongCurveCuttingEgdgePoint;
+	Standard_Real firstParameterSideLongCurveCuttingEgdgeParameter;
+	gp_Pnt lastParameterSideLongCurveCuttingEgdgePoint;
+	Standard_Real lastParameterSideLongCurveCuttingEgdgeParameter;
+
+	//Standard_Real diferenceOfAngle_FromCenterToFirstParameterOfLongerCurve = midParameterOflongercurve - firstParameterOfLongerCurve;
+	
+	Standard_Real fromFirstParameterPointToPointOnLongerCurveByA1Angle = qAbs(firstParameterOfLongerCurveToZAxisVector.Angle(pointOnLongerCurveByA1ToZAxisVector));
+	
+	if (bladeCenterToFirstParameterPointAngle < fromFirstParameterPointToPointOnLongerCurveByA1Angle)
+	{
+		firstParameterSideLongCurveCuttingEgdgePoint = pointOnLongerCurveByA2_AngleFromBladeCenterLine;
+		firstParameterSideLongCurveCuttingEgdgeParameter = parameterByA2_AngleFromBladeCenterLine;
+		lastParameterSideLongCurveCuttingEgdgePoint = pointOnLongerCurveByA1_AngleFromBladeCenterLine;
+		lastParameterSideLongCurveCuttingEgdgeParameter = parameterByA1_AngleFromBladeCenterLine;
+	}
+	else
+	{
+		firstParameterSideLongCurveCuttingEgdgePoint = pointOnLongerCurveByA1_AngleFromBladeCenterLine;
+		firstParameterSideLongCurveCuttingEgdgeParameter = parameterByA1_AngleFromBladeCenterLine;
+		lastParameterSideLongCurveCuttingEgdgePoint = pointOnLongerCurveByA2_AngleFromBladeCenterLine;
+		lastParameterSideLongCurveCuttingEgdgeParameter = parameterByA2_AngleFromBladeCenterLine;
+	}
+	
+
+	//removeDisplaiedAISShape();
+	//TopoDS_Shape topoDSVertexShape1 = BRepBuilderAPI_MakeVertex(firstParameterSideLongCurveCuttingEgdgePoint);
+	//displayASape(topoDSVertexShape1);
+	//TopoDS_Shape topoDSVertexShape2 = BRepBuilderAPI_MakeVertex(lastParameterSideLongCurveCuttingEgdgePoint);
+	//displayASape(topoDSVertexShape2);
+
+
+
+	
+	//Handle(Geom_Curve) hubFaceCurve1_CuttingTool = new Geom_TrimmedCurve(longerCurve, firstParameterOfLongerCurve, firstParameterSideLongCurveCuttingEgdgeParameter);
+	//Handle(Geom_Curve) hubFaceCurve2_CuttingTool = new Geom_TrimmedCurve(longerCurve, lastParameterSideLongCurveCuttingEgdgeParameter, lastParameterOfLongerCurve);
+	
+	//TopoDS_Edge hubFaceEdge1_CuttingTool = BRepBuilderAPI_MakeEdge(hubFaceCurve1_CuttingTool);
+	//TopoDS_Edge hubFaceEdge2_CuttingTool = BRepBuilderAPI_MakeEdge(hubFaceCurve2_CuttingTool);
+
+	//removeDisplaiedAISShape();
+	//displayASape(hubFaceEdge1_CuttingTool);
+	//displayASape(hubFaceEdge2_CuttingTool);
+
+
+
+	hubThickness = CenterLineLength * 0.2;
+
+	/* find 3 points to to creat the inner hub face circle*/
+	gp_Vec firstCuttingEdgePointToZAxis_Vector(firstParameterSideLongCurveCuttingEgdgePoint, rotatingAxisPointForSelectedPlane);
+	gp_Dir firstCuttingEdgePointToZAxis_Direction(firstCuttingEdgePointToZAxis_Vector);
+	gp_Vec firstCuttingEdgePointToZAxis_UnitVector(firstCuttingEdgePointToZAxis_Direction);
+
+	gp_Trsf theTransformation_FirstCuttingEdgePoint;
+	theTransformation_FirstCuttingEdgePoint.SetTranslation(firstCuttingEdgePointToZAxis_UnitVector.Multiplied(hubThickness));
+
+	gp_Pnt point1 = firstParameterSideLongCurveCuttingEgdgePoint.Transformed(theTransformation_FirstCuttingEdgePoint);
+
+	gp_Vec lastCuttingEdgePointToZAxis_Vector(lastParameterSideLongCurveCuttingEgdgePoint, rotatingAxisPointForSelectedPlane);
+	gp_Dir lastCuttingEdgePointToZAxis_Direction(lastCuttingEdgePointToZAxis_Vector);
+	gp_Vec lastCuttingEdgePointToZAxis_UnitVector(lastCuttingEdgePointToZAxis_Direction);
+
+	gp_Trsf theTransformation_LastCuttingEdgePoint;
+	theTransformation_LastCuttingEdgePoint.SetTranslation(lastCuttingEdgePointToZAxis_UnitVector.Multiplied(hubThickness));
+
+	gp_Pnt point2 = lastParameterSideLongCurveCuttingEgdgePoint.Transformed(theTransformation_LastCuttingEdgePoint);
+
+	gp_Dir bladeCenterLine_Direction(faceCenterLineVector);
+	gp_Vec bladeCenterLine_UnitVector(bladeCenterLine_Direction);
+
+	gp_Trsf theTransformation_bladeCenterPoint;
+	theTransformation_bladeCenterPoint.SetTranslation(bladeCenterLine_UnitVector.Multiplied(hubThickness));
+
+	gp_Pnt point3 = bladeCenterPointOnHubSerface.Transformed(theTransformation_bladeCenterPoint);
+
+	/* find cutting tool's hub face curves*/
+	gp_Trsf Transformation_firstParameterSideLongCurveCuttingEgdgePointCuttingTool;
+	Transformation_firstParameterSideLongCurveCuttingEgdgePointCuttingTool.SetTranslation(-((firstCuttingEdgePointToZAxis_UnitVector.Multiplied(5))));
+	gp_Pnt firstParameterSideLongCurveCuttingEgdgePoint_CuttingTool = 
+		firstParameterSideLongCurveCuttingEgdgePoint.Transformed(Transformation_firstParameterSideLongCurveCuttingEgdgePointCuttingTool);
+
+	gp_Trsf Transformation_firstParameterPointCuttingTool;
+	Transformation_firstParameterPointCuttingTool.SetTranslation(-((firstParameterOfLongerCurveToZAxis_UnitVector.Multiplied(5))));
+	gp_Pnt firstParameterPoint_CuttingTool =
+		firstParameterPointOfLongerCurve.Transformed(Transformation_firstParameterPointCuttingTool);
+
+	gp_Trsf Transformation_lastParameterSideLongCurveCuttingEgdgePointCuttingTool;
+	Transformation_lastParameterSideLongCurveCuttingEgdgePointCuttingTool.SetTranslation(-((lastCuttingEdgePointToZAxis_UnitVector.Multiplied(5))));
+	gp_Pnt lastParameterSideLongCurveCuttingEgdgePoint_CuttingTool =
+		lastParameterSideLongCurveCuttingEgdgePoint.Transformed(Transformation_lastParameterSideLongCurveCuttingEgdgePointCuttingTool);
+
+	gp_Trsf Transformation_lastParameterPointCuttingTool;
+	Transformation_lastParameterPointCuttingTool.SetTranslation(-((lastParameterOfLongerCurveToZAxis_UnitVector.Multiplied(5))));
+	gp_Pnt lastParameterPoint_CuttingTool =
+		lastParameterPointOfLongerCurve.Transformed(Transformation_lastParameterPointCuttingTool);
+
+	gp_Circ hubfaceCuttingToolCircle(rotatingAxis2, firstParameterSideLongCurveCuttingEgdgePoint_CuttingTool.Distance(rotatingAxisPointForSelectedPlane));
+
+	Handle(Geom_TrimmedCurve) hubFaceCurve1_CuttingTool = GC_MakeArcOfCircle(hubfaceCuttingToolCircle,
+																	firstParameterPoint_CuttingTool,
+																	firstParameterSideLongCurveCuttingEgdgePoint_CuttingTool, true);
+	Handle(Geom_TrimmedCurve) hubFaceCurve2_CuttingTool = GC_MakeArcOfCircle(hubfaceCuttingToolCircle,
+																	lastParameterSideLongCurveCuttingEgdgePoint_CuttingTool,
+																	lastParameterPoint_CuttingTool, true);
+
+	TopoDS_Edge hubFaceEdge1_CuttingTool = BRepBuilderAPI_MakeEdge(hubFaceCurve1_CuttingTool);
+	TopoDS_Edge hubFaceEdge2_CuttingTool = BRepBuilderAPI_MakeEdge(hubFaceCurve2_CuttingTool);
+
+	//removeDisplaiedAISShape();
+	displayASape(hubFaceEdge1_CuttingTool);
+	displayASape(hubFaceEdge2_CuttingTool);
+
+	gp_Pnt firstParameterSide_CuttingToolPoint = longerCurve->Value(firstParameterOfLongerCurve- (midParameterOflongercurve/5));
+	gp_Pnt lastParameterSide_CuttingToolPoint = longerCurve->Value(lastParameterOfLongerCurve + (midParameterOflongercurve / 5));
+	//TopoDS_Shape topoDSVertexShape1 = BRepBuilderAPI_MakeVertex(lastParameterSide_CuttingToolPoint);
+	//displayASape(topoDSVertexShape1);
+
+	gp_Vec firstParameterSide_CuttingToolPointToZaxis_Vector(firstParameterSide_CuttingToolPoint, rotatingAxisPointForSelectedPlane);
+	gp_Dir firstParameterSide_CuttingToolPointToZaxis_VectorDirection(firstParameterSide_CuttingToolPointToZaxis_Vector);
+	gp_Vec firstParameterSide_CuttingToolPointToZaxis_UnitVector(firstParameterSide_CuttingToolPointToZaxis_VectorDirection);
+
+	gp_Vec lastParameterSide_CuttingToolPointToZaxis_Vector(lastParameterSide_CuttingToolPoint, rotatingAxisPointForSelectedPlane);
+	gp_Dir lastParameterSide_CuttingToolPointToZaxis_VectorDirection(lastParameterSide_CuttingToolPointToZaxis_Vector);
+	gp_Vec lastParameterSide_CuttingToolPointToZaxis_UnitVector(lastParameterSide_CuttingToolPointToZaxis_VectorDirection);
+
+	gp_Trsf Transformation_firstParameterSide_CuttingToolPoint;
+	Transformation_firstParameterSide_CuttingToolPoint.SetTranslation(firstParameterSide_CuttingToolPointToZaxis_UnitVector * (CenterLineLength + 6));
+	gp_Pnt firstParameterSide_CuttingTool_BottomPoint =
+		firstParameterSide_CuttingToolPoint.Transformed(Transformation_firstParameterSide_CuttingToolPoint);
+
+	gp_Trsf Transformation_lastParameterSide_CuttingToolPoint;
+	Transformation_lastParameterSide_CuttingToolPoint.SetTranslation(lastParameterSide_CuttingToolPointToZaxis_UnitVector * (CenterLineLength + 6));
+	gp_Pnt lastParameterSide_CuttingTool_BottomPoint =
+		lastParameterSide_CuttingToolPoint.Transformed(Transformation_lastParameterSide_CuttingToolPoint);
+
+	Handle(Geom_TrimmedCurve) firstParameterSide_cuttingToolCurve = GC_MakeSegment(firstParameterSide_CuttingToolPoint, 
+																			firstParameterSide_CuttingTool_BottomPoint);
+	Handle(Geom_TrimmedCurve) lastParameterSide_cuttingToolCurve = GC_MakeSegment(lastParameterSide_CuttingToolPoint,
+																			lastParameterSide_CuttingTool_BottomPoint);
+
+	TopoDS_Edge firstParameterSide_cuttingToolEdge = BRepBuilderAPI_MakeEdge(firstParameterSide_cuttingToolCurve);
+	TopoDS_Edge lastParameterSide_cuttingToolEdge = BRepBuilderAPI_MakeEdge(lastParameterSide_cuttingToolCurve);
+
+	displayASape(firstParameterSide_cuttingToolEdge);
+	displayASape(lastParameterSide_cuttingToolEdge);
+
+	Handle(Geom_TrimmedCurve) upperConnecter1_Curve = GC_MakeSegment(firstParameterPoint_CuttingTool,
+																firstParameterSide_CuttingToolPoint);
+	Handle(Geom_TrimmedCurve) upperConnecter2_Curve = GC_MakeSegment(lastParameterPoint_CuttingTool,
+																lastParameterSide_CuttingToolPoint);
+
+	TopoDS_Edge upperConnecter1_Edge = BRepBuilderAPI_MakeEdge(upperConnecter1_Curve);
+	TopoDS_Edge upperConnecter2_Edge = BRepBuilderAPI_MakeEdge(upperConnecter2_Curve);
+
+	displayASape(upperConnecter1_Edge);
+	displayASape(upperConnecter2_Edge);
+
+	Handle(Geom_TrimmedCurve) cuttingTool_BottomCurve = GC_MakeSegment(firstParameterSide_CuttingTool_BottomPoint,
+																	lastParameterSide_CuttingTool_BottomPoint);
+
+	TopoDS_Edge cuttingTool_BottomEdge = BRepBuilderAPI_MakeEdge(cuttingTool_BottomCurve);
+
+	displayASape(cuttingTool_BottomEdge);
+
+	//TopoDS_Shape topoDSVertexShape11 = BRepBuilderAPI_MakeVertex(firstParameterSide_CuttingTool_BottomPoint);
+	//displayASape(topoDSVertexShape11);
+
+	/* create innner hub serface*/
+	Handle(Geom_TrimmedCurve) hubBottomFaceCurve = GC_MakeArcOfCircle(point1, point3, point2);
+
+	//TopoDS_Edge hubBottomFaceCurveEdge = BRepBuilderAPI_MakeEdge(hubBottomFaceCurve);
+
+	Handle(Geom_TrimmedCurve) hubSide1Curve = GC_MakeSegment(firstParameterSideLongCurveCuttingEgdgePoint_CuttingTool, point1);
+	Handle(Geom_TrimmedCurve) hubSide2Curve = GC_MakeSegment(lastParameterSideLongCurveCuttingEgdgePoint_CuttingTool, point2);
+
+	TopoDS_Edge hubSide1Edge = BRepBuilderAPI_MakeEdge(hubSide1Curve);
+	TopoDS_Edge hubSide2Edge = BRepBuilderAPI_MakeEdge(hubSide2Curve);
+
+	//removeDisplaiedAISShape();
+	//displayASape(hubBottomFaceCurveEdge);
+	//displayASape(hubSide1Edge);
+	//displayASape(hubSide2Edge);
+
+	/* find the parameter values of first, last and blade center and firTree Center on bottom hubface curve*/
+	Standard_Real parameterHubBottomCurveOnBladeCenter;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, point3, 1e-7, parameterHubBottomCurveOnBladeCenter);
+
+	Standard_Real hubSide1ParameterOnHubBottomFaceCurve;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, point1, 1e-7, hubSide1ParameterOnHubBottomFaceCurve);
+
+	Standard_Real hubSide2ParameterOnHubBottomFaceCurve;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, point2, 1e-7, hubSide2ParameterOnHubBottomFaceCurve);
+
+	gp_Pnt firTreeCenterLinePointOnHubBottomCurve = point3.Rotated(rotatingAxis, A3);
+	Standard_Real parameterfirTreeCenterLinePointOnHubBottomCurve;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, firTreeCenterLinePointOnHubBottomCurve, 1e-7, parameterfirTreeCenterLinePointOnHubBottomCurve);
+	
+
+	gp_Vec firTreeCenterToZAxisLine_Vector(firTreeCenterLinePointOnHubBottomCurve, rotatingAxisPointForSelectedPlane);
+	gp_Dir firTreeCenterToZAxisLine_VectorDirection(firTreeCenterToZAxisLine_Vector);
+	gp_Vec firTreeCenterToZAxisLine_UnitVector(firTreeCenterToZAxisLine_VectorDirection);
+	gp_Ax1 firTreeCenterAxis(firTreeCenterLinePointOnHubBottomCurve, firTreeCenterToZAxisLine_Vector);
+
+
+	/* find the neck start points on botton neck surface*/
+	gp_Pnt nearToSide1_neckStartPoint = point3.Rotated(rotatingAxis, A3 - (A4/2));
+	Standard_Real parameterNearToSide1_neckStartPoint;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, nearToSide1_neckStartPoint, 1e-7, parameterNearToSide1_neckStartPoint);
+
+	gp_Pnt farToside1_neckStartPoint = point3.Rotated(rotatingAxis, A3 + (A4 / 2));
+	Standard_Real parameterFarToSide1_neckStartPoint;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, farToside1_neckStartPoint, 1e-7, parameterFarToSide1_neckStartPoint);
+
+	gp_Pnt neckStartPoint = nearToSide1_neckStartPoint;
+
+	Handle(Geom_Curve) hubSide1HubBottomCurve = new Geom_TrimmedCurve(hubBottomFaceCurve, hubSide1ParameterOnHubBottomFaceCurve, parameterNearToSide1_neckStartPoint);
+	Handle(Geom_Curve) hubSide2HubBottomCurve = new Geom_TrimmedCurve(hubBottomFaceCurve, parameterFarToSide1_neckStartPoint, hubSide2ParameterOnHubBottomFaceCurve);
+
+	TopoDS_Edge hubSide1HubBottomEdge = BRepBuilderAPI_MakeEdge(hubSide1HubBottomCurve);
+	//displayASape(hubSide1HubBottomEdge);
+	TopoDS_Edge hubSide2HubBottomEdge = BRepBuilderAPI_MakeEdge(hubSide2HubBottomCurve);
+	//displayASape(hubSide2HubBottomEdge);
+
+
+
+
+
+
+	//gp_Vec faceCenterUnitVector = bladeCenterLineVector.Divided(CenterLineLength);
+
+	//TopoDS_Edge hubBottomCurveEdge;
+
+	//Standard_Real hubThickness = CenterLineLength * 0.2;
+
+	//TopoDS_Shape trnsFormingEdge = longerCurveEdge;
+
+	//gp_Trsf theTransformation;
+	//gp_Vec centerUnitVector(bladeCenterLineVectorDirection);
+	//theTransformation.SetTranslation(centerUnitVector.Multiplied(hubThickness));
+	//BRepBuilderAPI_Transform myBRepTransformation(trnsFormingEdge, theTransformation, true);
+
+	//TopoDS_Shape hubBottomCurveShape = myBRepTransformation.Shape();
+
+	//hubBottomCurveEdge = TopoDS::Edge(hubBottomCurveShape);
 
 	//displayASape(hubBottomCurveEdge);
 
@@ -2077,9 +2379,9 @@ void occQt::setFirTree2()
 
 	//displayASape(hubBottomCurveEdge);
 
-	Standard_Real firstParameterOfHabBottemCurve;
-	Standard_Real lastParameterOfHabBottemCurve;
-	Handle(Geom_Curve) hubBottomCurve = BRep_Tool::Curve(hubBottomCurveEdge, firstParameterOfHabBottemCurve, lastParameterOfHabBottemCurve);
+	//Standard_Real firstParameterOfHabBottemCurve;
+	//Standard_Real lastParameterOfHabBottemCurve;
+	//Handle(Geom_Curve) hubBottomCurve = BRep_Tool::Curve(hubBottomCurveEdge, firstParameterOfHabBottemCurve, lastParameterOfHabBottemCurve);
 
 	//gp_Pnt pt1 = hubBottomCurve->Value(firstParameterOfHabBottemCurve);
 	//gp_Pnt pt2 = hubBottomCurve->Value(lastParameterOfHabBottemCurve);
@@ -2087,160 +2389,161 @@ void occQt::setFirTree2()
 
 	//displayASape(BRepBuilderAPI_MakeEdge(hubBottomCurve).Edge());
 
-	Standard_Real midParameterOfHabBottemCurve = (firstParameterOfHabBottemCurve + lastParameterOfHabBottemCurve) / 2;
+	//Standard_Real midParameterOfHabBottemCurve = (firstParameterOfHabBottemCurve + lastParameterOfHabBottemCurve) / 2;
 
-	Standard_Real diference = (midParameterOfHabBottemCurve - firstParameterOfHabBottemCurve);
+	//Standard_Real diference = (midParameterOfHabBottemCurve - firstParameterOfHabBottemCurve);
 
-	Standard_Real U3 = midParameterOfHabBottemCurve - (lastParameterOfHabBottemCurve * 0.1);
+	//Standard_Real U3 = midParameterOfHabBottemCurve - (lastParameterOfHabBottemCurve * 0.1);
 
 
 	//toolUperHalfLine.SetTrim(firstParameterOfHabBottemCurve, midParameterOfHabBottemCurve);
 
-	Handle(Geom_Curve) toolUperHalfLineCurve = new Geom_TrimmedCurve(hubBottomCurve, firstParameterOfHabBottemCurve, U3);
+	//Handle(Geom_Curve) toolUperHalfLineCurve = new Geom_TrimmedCurve(hubBottomCurve, firstParameterOfHabBottemCurve, U3);
 
-	TopoDS_Edge aEdge1 = BRepBuilderAPI_MakeEdge(toolUperHalfLineCurve);
+	//TopoDS_Edge aEdge1 = BRepBuilderAPI_MakeEdge(toolUperHalfLineCurve);
 	//removeDisplaiedAISShape();
 	//displayASape(aEdge1);
+	///////////////////////////////////////////////////////////////////////////////////
+	//gp_Pnt neckStartPoint = toolUperHalfLineCurve->Value(U3);
 
-	gp_Pnt neckStartPoint = toolUperHalfLineCurve->Value(U3);
 
 
-
-	Standard_Real neckHeight = CenterLineLength * 0.2;
+	neckHeight = CenterLineLength * 0.2;
 
 	gp_Trsf theTransformationNeckPoint;
-	//gp_Vec centerUnitVector(faceCenterDirection);
-	theTransformationNeckPoint.SetTranslation(centerUnitVector.Multiplied(neckHeight));
+	theTransformationNeckPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(neckHeight));
 
 	gp_Pnt neckEndPoint = neckStartPoint.Transformed(theTransformationNeckPoint);
 
 	Handle(Geom_TrimmedCurve) neckLineCurve = GC_MakeSegment(neckStartPoint, neckEndPoint);
 
-	TopoDS_Edge aEdge2 = BRepBuilderAPI_MakeEdge(neckLineCurve);
+	TopoDS_Edge neckLineEdge = BRepBuilderAPI_MakeEdge(neckLineCurve);
 	//removeDisplaiedAISShape();
-	//displayASape(aEdge2);
+	//displayASape(neckLineEdge);
 
-	QVector<TopoDS_Edge> firstHalfEdges;
-	firstHalfEdges.append(aEdge1);
-	firstHalfEdges.append(aEdge2);
+	QVector<TopoDS_Edge> firstHalfFirTreeEdges;
+	//firstHalfEdges.append(aEdge1);
+	firstHalfFirTreeEdges.append(neckLineEdge);
 
 
-	gp_Pnt lastAngle_2_LastPoint;
-
-	gp_Pnt Angle_1_FirstPoint = neckEndPoint;
+	gp_Pnt lastLobeReleaf_LastPoint;
+	gp_Pnt lobeLoadEdge_1_FirstPoint = neckEndPoint;
+	TopoDS_Edge edgeBeforeLobeLoad = neckLineEdge;
+	TopoDS_Edge lastLobeReleaf;
 
 	for (int i = 0; i < 3; i++)
 	{
-		Standard_Real angleLength = CenterLineLength * (0.9 - (0.15*i));
+		LobeLoadLength = CenterLineLength * (0.6 - (0.15*i));
 
-		gp_Trsf theTransformationAngle_1_Point;
+		gp_Trsf theTransformationLobeLoadEdge_1_Point;
 		//gp_Vec centerUnitVector(faceCenterDirection);
-		theTransformationAngle_1_Point.SetTranslation(centerUnitVector.Multiplied(angleLength));
+		theTransformationLobeLoadEdge_1_Point.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(LobeLoadLength));
 
-		gp_Pnt angleLastPointBefore = Angle_1_FirstPoint.Transformed(theTransformationAngle_1_Point);
+		gp_Pnt angleLastPointBefore = lobeLoadEdge_1_FirstPoint.Transformed(theTransformationLobeLoadEdge_1_Point);
 
 		//gp_Pnt aOrigin(0, 0, 0);
 		gp_Dir zDir(0, 0, 1);
-		gp_Ax1 neckEndPointAxis(Angle_1_FirstPoint, zDir);
+		gp_Ax1 neckEndPointAxis(lobeLoadEdge_1_FirstPoint, zDir);
 
 		gp_Pnt angle_1_LastPoint = angleLastPointBefore.Rotated(neckEndPointAxis, ((3.141 * 2.5) / 6));
 
-		Handle(Geom_TrimmedCurve) angle_1_Curve = GC_MakeSegment(Angle_1_FirstPoint, angle_1_LastPoint);
+		Handle(Geom_TrimmedCurve) angle_1_Curve = GC_MakeSegment(lobeLoadEdge_1_FirstPoint, angle_1_LastPoint);
 
-		TopoDS_Edge aEdge3 = BRepBuilderAPI_MakeEdge(angle_1_Curve);
+		TopoDS_Edge angle_1_Edge = BRepBuilderAPI_MakeEdge(angle_1_Curve);
 
-		firstHalfEdges.append(aEdge3);
+		firstHalfFirTreeEdges.insert(0, angle_1_Edge);
 
 		//removeDisplaiedAISShape();
-		//displayASape(aEdge3);
+		//displayASape(angle_1_Edge);
 
-		Standard_Real angleThickness = CenterLineLength * 0.2;
+		LobeThickness = CenterLineLength * 0.1;
 
 		gp_Trsf theTransformationAngle_2_Point;
-		theTransformationAngle_2_Point.SetTranslation(centerUnitVector.Multiplied(angleThickness));
+		theTransformationAngle_2_Point.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(LobeThickness));
 
-		gp_Pnt angle_2_LastPoint = Angle_1_FirstPoint.Transformed(theTransformationAngle_2_Point);
+		gp_Pnt angle_2_LastPoint = lobeLoadEdge_1_FirstPoint.Transformed(theTransformationAngle_2_Point);
 
 		Handle(Geom_TrimmedCurve) angle_2_Curve = GC_MakeSegment(angle_1_LastPoint, angle_2_LastPoint);
 
-		TopoDS_Edge aEdge4 = BRepBuilderAPI_MakeEdge(angle_2_Curve);
+		TopoDS_Edge angle_2_Edge = BRepBuilderAPI_MakeEdge(angle_2_Curve);
 
-		firstHalfEdges.append(aEdge4);
+		firstHalfFirTreeEdges.insert(0, angle_2_Edge);
 
 		//removeDisplaiedAISShape();
-		//displayASape(aEdge4);
+		//displayASape(angle_2_Edge);
 
-		lastAngle_2_LastPoint = angle_2_LastPoint;
-		Angle_1_FirstPoint = lastAngle_2_LastPoint;
+		lastLobeReleaf_LastPoint = angle_2_LastPoint;
+		lobeLoadEdge_1_FirstPoint = lastLobeReleaf_LastPoint;
 
 	}
 	//////////////////////////////////////
-	Standard_Real firTreeHeight = CenterLineLength * 0.9;
+	Standard_Real firTreeHeight = CenterLineLength * 0.5;
 
 	gp_Trsf theTransformationMidBottomPoint;
-	theTransformationMidBottomPoint.SetTranslation(centerUnitVector.Multiplied(firTreeHeight));
+	theTransformationMidBottomPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(firTreeHeight));
 
-	//gp_Pnt MidBottomPointPoint = longerCurveCenterPoint.Transformed(theTransformationMidBottomPoint);
-	gp_Pnt MidBottomPointPoint(longerCurveCenterPoint.X(), lastAngle_2_LastPoint.Y(), longerCurveCenterPoint.Z());
+	gp_Pnt MidBottomFirTreetPoint = firTreeCenterLinePointOnHubBottomCurve.Transformed(theTransformationMidBottomPoint);
 
-	Handle(Geom_TrimmedCurve) centerConnectCurve = GC_MakeSegment(lastAngle_2_LastPoint, MidBottomPointPoint);
+	//gp_Pnt MidBottomFirTreetPoint(firTreeCenterLinePointOnHubBottomCurve.X(), lastAngle_2_LastPoint.Y(), firTreeCenterLinePointOnHubBottomCurve.Z());
 
-	TopoDS_Edge aEdge5 = BRepBuilderAPI_MakeEdge(centerConnectCurve);
-	firstHalfEdges.append(aEdge5);
+	Handle(Geom_TrimmedCurve) centerConnectCurve = GC_MakeSegment(lastLobeReleaf_LastPoint, MidBottomFirTreetPoint);
 
-	//displayASape(aEdge5);
+	TopoDS_Edge centerConnectCurveEdge = BRepBuilderAPI_MakeEdge(centerConnectCurve);
+	firstHalfFirTreeEdges.insert(0, centerConnectCurveEdge);
+
+	//displayASape(centerConnectCurveEdge);
 
 	//Standard_Real firTreeHeight = CenterLineLength * 0.9;
 
-	gp_Trsf theTransformationToolMidBottomPoint;
-	theTransformationToolMidBottomPoint.SetTranslation(centerUnitVector.Multiplied(CenterLineLength * 2));
+	//gp_Trsf theTransformationToolMidBottomPoint;
+	//theTransformationToolMidBottomPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(CenterLineLength * 2));
 
-	gp_Pnt toolMiddBottomPoint = longerCurveCenterPoint.Transformed(theTransformationToolMidBottomPoint);
+	//gp_Pnt toolMiddBottomPoint = longerCurveCenterPoint.Transformed(theTransformationToolMidBottomPoint);
 
 	//Handle(Geom_TrimmedCurve) centerLastCurve = GC_MakeSegment(MidBottomPointPoint, toolMiddBottomPoint);
 
 	//TopoDS_Edge aEdge6 = BRepBuilderAPI_MakeEdge(centerLastCurve);
 	//displayASape(aEdge6);
+	
+	//gp_Pnt toolUpperHalfLineOuterCurve = toolUperHalfLineCurve->Value(firstParameterOfHabBottemCurve);
 
-	gp_Pnt toolUpperHalfLineOuterCurve = toolUperHalfLineCurve->Value(firstParameterOfHabBottemCurve);
+	//gp_Pnt toolLastPoint(toolUpperHalfLineOuterCurve.X(), toolMiddBottomPoint.Y(), toolUpperHalfLineOuterCurve.Z());
 
-	gp_Pnt toolLastPoint(toolUpperHalfLineOuterCurve.X(), toolMiddBottomPoint.Y(), toolUpperHalfLineOuterCurve.Z());
+	//Handle(Geom_TrimmedCurve) toolbottomCurve = GC_MakeSegment(toolMiddBottomPoint, toolLastPoint);
 
-	Handle(Geom_TrimmedCurve) toolbottomCurve = GC_MakeSegment(toolMiddBottomPoint, toolLastPoint);
-
-	TopoDS_Edge aEdge6 = BRepBuilderAPI_MakeEdge(toolbottomCurve);
+	//TopoDS_Edge aEdge6 = BRepBuilderAPI_MakeEdge(toolbottomCurve);
 
 
 	//displayASape(aEdge6);
 
-	Handle(Geom_TrimmedCurve) toolSideCurve = GC_MakeSegment(toolLastPoint, toolUpperHalfLineOuterCurve);
+	//Handle(Geom_TrimmedCurve) toolSideCurve = GC_MakeSegment(toolLastPoint, toolUpperHalfLineOuterCurve);
 
-	TopoDS_Edge aEdge7 = BRepBuilderAPI_MakeEdge(toolSideCurve);
+	//TopoDS_Edge aEdge7 = BRepBuilderAPI_MakeEdge(toolSideCurve);
 
-	firstHalfEdges.insert(0, aEdge7);
-	firstHalfEdges.insert(0, aEdge6);
+	//firstHalfEdges.insert(0, aEdge7);
+	//firstHalfEdges.insert(0, aEdge6);
 
 
 	BRepBuilderAPI_MakeWire wireMaker1;
 
-	for (int i = 0; i < firstHalfEdges.length();i++)
+	for (int i = 0; i < firstHalfFirTreeEdges.length();i++)
 	{
-		wireMaker1.Add(firstHalfEdges.at(i));
+		wireMaker1.Add(firstHalfFirTreeEdges.at(i));
 	}
 
 
 
-	TopoDS_Wire halfWireProfile = wireMaker1.Wire();
+	TopoDS_Wire halfFirTreeWireProfile = wireMaker1.Wire();
 	//displayASape(aEdge7);
 
 
 
 	//removeDisplaiedAISShape();
-	//displayASape(halfWireProfile);
+	//displayASape(halfFirTreeWireProfile);
 
 	gp_Trsf aTrsf;
-	aTrsf.SetMirror(faceCenterAxis);
-	BRepBuilderAPI_Transform aBRepTrsf(halfWireProfile, aTrsf);
+	aTrsf.SetMirror(firTreeCenterAxis);
+	BRepBuilderAPI_Transform aBRepTrsf(halfFirTreeWireProfile, aTrsf);
 	TopoDS_Shape aMirroredShape = aBRepTrsf.Shape();
 	TopoDS_Wire aMirroredWire = TopoDS::Wire(aMirroredShape);
 
@@ -2252,33 +2555,56 @@ void occQt::setFirTree2()
 
 	//displayASape(BRepBuilderAPI_MakeEdge(longerCurveCenterPoint, pt).Edge());
 	BRepBuilderAPI_MakeWire mkWire(aMirroredWire);
-	mkWire.Add(halfWireProfile);
+	mkWire.Add(halfFirTreeWireProfile);
 	TopoDS_Wire WireProfile = mkWire.Wire();
 
 	//removeDisplaiedAISShape();
 	//displayASape(WireProfile);
 
-	TopoDS_Face myFaceProfile = BRepBuilderAPI_MakeFace(WireProfile);
-
+	BRepBuilderAPI_MakeWire cutingToolWireMaker(WireProfile);
+	cutingToolWireMaker.Add(hubSide1HubBottomEdge);
+	cutingToolWireMaker.Add(hubSide2HubBottomEdge);
+	cutingToolWireMaker.Add(hubSide1Edge);
+	cutingToolWireMaker.Add(hubSide2Edge);
+	cutingToolWireMaker.Add(hubFaceEdge1_CuttingTool);
+	cutingToolWireMaker.Add(hubFaceEdge2_CuttingTool);
+	cutingToolWireMaker.Add(upperConnecter1_Edge);
+	cutingToolWireMaker.Add(upperConnecter2_Edge);
+	cutingToolWireMaker.Add(lastParameterSide_cuttingToolEdge);
+	cutingToolWireMaker.Add(firstParameterSide_cuttingToolEdge);
+	cutingToolWireMaker.Add(cuttingTool_BottomEdge);
+	
+	TopoDS_Wire cuttingToolWire = cutingToolWireMaker.Wire();
+	
 	//removeDisplaiedAISShape();
-	//displayASape(myFaceProfile);
+	//displayASape(cuttingToolWire);
+
+
+
+
+	TopoDS_Face toolFaceProfile = BRepBuilderAPI_MakeFace(cuttingToolWire);
+
+	removeDisplaiedAISShape();
+	displayASape(toolFaceProfile);
 
 	gp_Vec aPrismVec(0, 0, -50);
 
-	TopoDS_Shape cuttingToolBody = BRepPrimAPI_MakePrism(myFaceProfile, aPrismVec);
+	TopoDS_Shape cuttingToolBody = BRepPrimAPI_MakePrism(toolFaceProfile, aPrismVec);
 
-	//removeDisplaiedAISShape();
-	//displayASape(cuttingToolBody);
+	removeDisplaiedAISShape();
+	displayASape(cuttingToolBody);
 
 	TopoDS_Shell shell = TopoDS::Shell(shape);
 
 	shape = BRepBuilderAPI_MakeSolid(shell);
 
+	//displayASape(shape);
+
 	shape = BRepAlgoAPI_Cut(shape, cuttingToolBody);
 
 	removeDisplaiedAISShape();
 	displayASape(shape);
-
+	
 }
 
 
