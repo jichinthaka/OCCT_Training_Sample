@@ -19,7 +19,7 @@
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
 #include <AIS_TextLabel.hxx>
-
+#include <TopoDS.hxx>
 
 class OccView;
 
@@ -126,9 +126,11 @@ private:
 
 	void removeDisplaiedAISLables(void);
 	
-	
-
 	TopoDS_Shape makeBoxWithInput(QString dialogBoxName);
+
+	TopoDS_Edge make2dFillet(TopoDS_Edge& e1, TopoDS_Edge& e2, gp_Pnt CommonPoint, Standard_Real r, gp_Ax3 thePlane);
+
+	void Checker(void);
 
 private:
     //! the exit action.
@@ -173,6 +175,8 @@ private:
     QAction* myHelixAction;
 
 	QAction* firTreeAction;
+
+	QAction* checkerAction;
 
     //! show the about info action.
     QAction* mAboutAction;
