@@ -248,6 +248,14 @@ void occQt::createActions( void )
 	firTreeAction->setStatusTip(tr("Set Fir Tree"));
 	connect(firTreeAction, SIGNAL(triggered()), this, SLOT(setFirTree2()));
 
+	setFilletModeAction = new QAction(tr("set Fillet Mode"), this);
+	setFilletModeAction->setStatusTip(tr("set Fillet Mode"));
+	connect(setFilletModeAction, SIGNAL(triggered()), this, SLOT(setFilletMode()));
+
+	setFilletAction = new QAction(tr("set Fillet"), this);
+	setFilletAction->setStatusTip(tr("set Fillet"));
+	connect(setFilletAction, SIGNAL(triggered()), this, SLOT(setFillet()));
+
 	checkerAction = new QAction(tr("checker"), this);
 	checkerAction->setStatusTip(tr("checker"));
 	connect(checkerAction, SIGNAL(triggered()), this, SLOT(Checker()));
@@ -332,8 +340,6 @@ void occQt::createToolBars( void )
 	mPrimitiveToolBar->addAction(mMakeBoxWithInput);
 	mPrimitiveToolBar->addAction(checkerAction);
 
-
-
     mModelingToolBar = addToolBar(tr("&Modeling"));
     mModelingToolBar->addAction(mFilletAction);
     mModelingToolBar->addAction(mChamferAction);
@@ -349,6 +355,8 @@ void occQt::createToolBars( void )
 
 	bladeModifyToolBar = addToolBar(tr("&Blade_Modify"));
 	bladeModifyToolBar->addAction(firTreeAction);
+	bladeModifyToolBar->addAction(setFilletModeAction);
+	bladeModifyToolBar->addAction(setFilletAction);
 
     mHelpToolBar = addToolBar(tr("Help"));
     mHelpToolBar->addAction(mAboutAction);
@@ -1928,12 +1936,18 @@ void occQt::setFirTree()
 
 #include <GeomLib_Tool.hxx>
 #include <ChFi2d_FilletAPI.hxx>
+#include <QTime>
+#include <GeomConvert.hxx>
 void occQt::setFirTree2()
 {
+	QTime myTimer;
+	myTimer.start();
+
+
 	/* these are my inputs. hard coded just for now*/
 	Standard_Real A1 = (3.141 * 1.5) / 6;	//angle from blade center to one hub side
 	Standard_Real A2 = (3.141 * 1.5) / 6;		//angle from blade center to next hub side
-	Standard_Real A3 = (3.141 * (-0.7)) / 6;	//angle from blade center to fir tree center
+	Standard_Real A3 = (3.141 * (0.7)) / 6;	//angle from blade center to fir tree center
 
 	Standard_Real A4 = (3.141 * 0.5) / 15;	//just for now, assume Neck Thickness by an angle
 
@@ -1946,9 +1960,11 @@ void occQt::setFirTree2()
 	Standard_Real LobeThickness;	//get it as a fraction of selected face center line length
 							 //other other angle lengths are redusing fraction of this
 	Standard_Real concaveRadius = 0.5;
-	Standard_Real convexRadius = 0.2;
+	Standard_Real convexRadius = 0.5;
+	Standard_Real firTreebottomFilletRadius = 0.8;
+	Standard_Real firTreeupperFilletRadius = 0.9;
 
-	Standard_Real firTreeDepthFrom_SelectedFace = 10;
+	Standard_Real firTreeDepthFrom_SelectedFace = 5;
 	Standard_Real firTreeDepthFrom_NextToSelectedFace = 5;
 
 
@@ -2005,7 +2021,7 @@ void occQt::setFirTree2()
 		if (aCurrentCurve_Curvature != 0)
 		{
 			curvedTopoDSEdges.append(edge);
-			displayASape(edge);
+			//displayASape(edge);
 		}
 		else
 		{
@@ -2049,8 +2065,8 @@ void occQt::setFirTree2()
 	/* we get this center point as the point on both the center axis of blade
 	and  the long curve*/
 
-	removeDisplaiedAISShape();
-	displayASape(longerCurveEdge);
+	//removeDisplaiedAISShape();
+	//displayASape(longerCurveEdge);
 
 	gp_Pnt longerCurveCenterPoint;
 	gp_Pnt shoterCurveCenterPoint;
@@ -2065,11 +2081,10 @@ void occQt::setFirTree2()
 	gp_Pnt lastParameterPointOfLongerCurve = longerCurve->Value(lastParameterOfLongerCurve);
 
 	TopoDS_Shape topoDSVertexShape0 = BRepBuilderAPI_MakeVertex(longerCurveCenterPoint);
-	displayASape(topoDSVertexShape0);
+	//displayASape(topoDSVertexShape0);
 
 	bladeCenterPointOnHubSerface = longerCurveCenterPoint;  // just for hard code because don't know the blade center
 
-//	gp_Pnt  firstParameterPointOfLongerCurve = longerCurve->Value(firstParameterOfLongerCurve);
 
 	/* find the center of the shoter curve*/
 
@@ -2102,9 +2117,6 @@ void occQt::setFirTree2()
 	gp_Vec bladeCenterLineVector(bladeCenterPointOnHubSerface, rotatingAxisPointForSelectedPlane);
 
 	gp_Dir bladeCenterLineVectorDirection(bladeCenterLineVector);
-
-	//gp_Ax1 faceCenterAxis(longerCurveCenterPoint, faceCenterLineVector);
-
 
 	gp_Dir zDir(0, 0, 1);
 	gp_Ax1 rotatingAxis(rotatingAxisPointForSelectedPlane, zDir);
@@ -2169,27 +2181,6 @@ void occQt::setFirTree2()
 		lastParameterSideLongCurveCuttingEgdgePoint = pointOnLongerCurveByA2_AngleFromBladeCenterLine;
 		lastParameterSideLongCurveCuttingEgdgeParameter = parameterByA2_AngleFromBladeCenterLine;
 	}
-	
-
-	//removeDisplaiedAISShape();
-	//TopoDS_Shape topoDSVertexShape1 = BRepBuilderAPI_MakeVertex(firstParameterSideLongCurveCuttingEgdgePoint);
-	//displayASape(topoDSVertexShape1);
-	//TopoDS_Shape topoDSVertexShape2 = BRepBuilderAPI_MakeVertex(lastParameterSideLongCurveCuttingEgdgePoint);
-	//displayASape(topoDSVertexShape2);
-
-
-
-	
-	//Handle(Geom_Curve) hubFaceCurve1_CuttingTool = new Geom_TrimmedCurve(longerCurve, firstParameterOfLongerCurve, firstParameterSideLongCurveCuttingEgdgeParameter);
-	//Handle(Geom_Curve) hubFaceCurve2_CuttingTool = new Geom_TrimmedCurve(longerCurve, lastParameterSideLongCurveCuttingEgdgeParameter, lastParameterOfLongerCurve);
-	
-	//TopoDS_Edge hubFaceEdge1_CuttingTool = BRepBuilderAPI_MakeEdge(hubFaceCurve1_CuttingTool);
-	//TopoDS_Edge hubFaceEdge2_CuttingTool = BRepBuilderAPI_MakeEdge(hubFaceCurve2_CuttingTool);
-
-	//removeDisplaiedAISShape();
-	//displayASape(hubFaceEdge1_CuttingTool);
-	//displayASape(hubFaceEdge2_CuttingTool);
-
 
 
 	hubThickness = CenterLineLength * 0.2;
@@ -2255,8 +2246,8 @@ void occQt::setFirTree2()
 	TopoDS_Edge hubFaceEdge2_CuttingTool = BRepBuilderAPI_MakeEdge(hubFaceCurve2_CuttingTool);
 
 	//removeDisplaiedAISShape();
-	displayASape(hubFaceEdge1_CuttingTool);
-	displayASape(hubFaceEdge2_CuttingTool);
+	//displayASape(hubFaceEdge1_CuttingTool);
+	//displayASape(hubFaceEdge2_CuttingTool);
 
 	gp_Pnt firstParameterSide_CuttingToolPoint = longerCurve->Value(firstParameterOfLongerCurve- (midParameterOflongercurve/5));
 	gp_Pnt lastParameterSide_CuttingToolPoint = longerCurve->Value(lastParameterOfLongerCurve + (midParameterOflongercurve / 5));
@@ -2289,8 +2280,8 @@ void occQt::setFirTree2()
 	TopoDS_Edge firstParameterSide_cuttingToolEdge = BRepBuilderAPI_MakeEdge(firstParameterSide_cuttingToolCurve);
 	TopoDS_Edge lastParameterSide_cuttingToolEdge = BRepBuilderAPI_MakeEdge(lastParameterSide_cuttingToolCurve);
 
-	displayASape(firstParameterSide_cuttingToolEdge);
-	displayASape(lastParameterSide_cuttingToolEdge);
+	//displayASape(firstParameterSide_cuttingToolEdge);
+	//displayASape(lastParameterSide_cuttingToolEdge);
 
 	Handle(Geom_TrimmedCurve) upperConnecter1_Curve = GC_MakeSegment(firstParameterPoint_CuttingTool,
 																firstParameterSide_CuttingToolPoint);
@@ -2300,21 +2291,23 @@ void occQt::setFirTree2()
 	TopoDS_Edge upperConnecter1_Edge = BRepBuilderAPI_MakeEdge(upperConnecter1_Curve);
 	TopoDS_Edge upperConnecter2_Edge = BRepBuilderAPI_MakeEdge(upperConnecter2_Curve);
 
-	displayASape(upperConnecter1_Edge);
-	displayASape(upperConnecter2_Edge);
+	//displayASape(upperConnecter1_Edge);
+	//displayASape(upperConnecter2_Edge);
 
 	Handle(Geom_TrimmedCurve) cuttingTool_BottomCurve = GC_MakeSegment(firstParameterSide_CuttingTool_BottomPoint,
 																	lastParameterSide_CuttingTool_BottomPoint);
 
 	TopoDS_Edge cuttingTool_BottomEdge = BRepBuilderAPI_MakeEdge(cuttingTool_BottomCurve);
 
-	displayASape(cuttingTool_BottomEdge);
+	//displayASape(cuttingTool_BottomEdge);
 
 	//TopoDS_Shape topoDSVertexShape11 = BRepBuilderAPI_MakeVertex(firstParameterSide_CuttingTool_BottomPoint);
 	//displayASape(topoDSVertexShape11);
 
 	/* create innner hub serface*/
 	Handle(Geom_TrimmedCurve) hubBottomFaceCurve = GC_MakeArcOfCircle(point1, point3, point2);
+	//Handle(Geom_TrimmedCurve) hubBottomFaceCurve_2 = GC_MakeArcOfCircle(point2, point3, point1);
+	
 
 	//TopoDS_Edge hubBottomFaceCurveEdge = BRepBuilderAPI_MakeEdge(hubBottomFaceCurve);
 
@@ -2363,6 +2356,10 @@ void occQt::setFirTree2()
 
 	Handle(Geom_Curve) hubSide1HubBottomCurve = new Geom_TrimmedCurve(hubBottomFaceCurve, hubSide1ParameterOnHubBottomFaceCurve, parameterNearToSide1_neckStartPoint);
 	Handle(Geom_Curve) hubSide2HubBottomCurve = new Geom_TrimmedCurve(hubBottomFaceCurve, parameterFarToSide1_neckStartPoint, hubSide2ParameterOnHubBottomFaceCurve);
+	//hubSide2HubBottomCurve->Reverse();
+
+	hubSide1HubBottomCurve = GeomConvert::CurveToBSplineCurve(hubSide1HubBottomCurve);
+	hubSide2HubBottomCurve = GeomConvert::CurveToBSplineCurve(hubSide2HubBottomCurve);
 
 	TopoDS_Edge hubSide1HubBottomEdge = BRepBuilderAPI_MakeEdge(hubSide1HubBottomCurve);
 	//displayASape(hubSide1HubBottomEdge);
@@ -2370,63 +2367,7 @@ void occQt::setFirTree2()
 	//displayASape(hubSide2HubBottomEdge);
 
 
-
-
-
-
-	//gp_Vec faceCenterUnitVector = bladeCenterLineVector.Divided(CenterLineLength);
-
-	//TopoDS_Edge hubBottomCurveEdge;
-
-	//Standard_Real hubThickness = CenterLineLength * 0.2;
-
-	//TopoDS_Shape trnsFormingEdge = longerCurveEdge;
-
-	//gp_Trsf theTransformation;
-	//gp_Vec centerUnitVector(bladeCenterLineVectorDirection);
-	//theTransformation.SetTranslation(centerUnitVector.Multiplied(hubThickness));
-	//BRepBuilderAPI_Transform myBRepTransformation(trnsFormingEdge, theTransformation, true);
-
-	//TopoDS_Shape hubBottomCurveShape = myBRepTransformation.Shape();
-
-	//hubBottomCurveEdge = TopoDS::Edge(hubBottomCurveShape);
-
-	//displayASape(hubBottomCurveEdge);
-
-	//removeDisplaiedAISShape();
-
-	//displayASape(hubBottomCurveEdge);
-
-	//Standard_Real firstParameterOfHabBottemCurve;
-	//Standard_Real lastParameterOfHabBottemCurve;
-	//Handle(Geom_Curve) hubBottomCurve = BRep_Tool::Curve(hubBottomCurveEdge, firstParameterOfHabBottemCurve, lastParameterOfHabBottemCurve);
-
-	//gp_Pnt pt1 = hubBottomCurve->Value(firstParameterOfHabBottemCurve);
-	//gp_Pnt pt2 = hubBottomCurve->Value(lastParameterOfHabBottemCurve);
-
-
-	//displayASape(BRepBuilderAPI_MakeEdge(hubBottomCurve).Edge());
-
-	//Standard_Real midParameterOfHabBottemCurve = (firstParameterOfHabBottemCurve + lastParameterOfHabBottemCurve) / 2;
-
-	//Standard_Real diference = (midParameterOfHabBottemCurve - firstParameterOfHabBottemCurve);
-
-	//Standard_Real U3 = midParameterOfHabBottemCurve - (lastParameterOfHabBottemCurve * 0.1);
-
-
-	//toolUperHalfLine.SetTrim(firstParameterOfHabBottemCurve, midParameterOfHabBottemCurve);
-
-	//Handle(Geom_Curve) toolUperHalfLineCurve = new Geom_TrimmedCurve(hubBottomCurve, firstParameterOfHabBottemCurve, U3);
-
-	//TopoDS_Edge aEdge1 = BRepBuilderAPI_MakeEdge(toolUperHalfLineCurve);
-	//removeDisplaiedAISShape();
-	//displayASape(aEdge1);
-	///////////////////////////////////////////////////////////////////////////////////
-	//gp_Pnt neckStartPoint = toolUperHalfLineCurve->Value(U3);
-
-
-
-	neckHeight = CenterLineLength * 0.4;
+	neckHeight = CenterLineLength * 0.3;
 
 	gp_Trsf theTransformationNeckPoint;
 	theTransformationNeckPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(neckHeight));
@@ -2448,6 +2389,8 @@ void occQt::setFirTree2()
 	gp_Pnt lobeLoadEdge_1_FirstPoint = neckEndPoint;
 	TopoDS_Edge edgeBeforeLobeLoad = neckLineEdge;
 	TopoDS_Edge lastLobeReleaf;
+
+	removeDisplaiedAISShape();
 
 	for (int i = 0; i < 2; i++)
 	{
@@ -2472,14 +2415,22 @@ void occQt::setFirTree2()
 		//ChFi2d_FilletAPI convexFillet(edgeBeforeLobeLoad, lobeLoad_Edge, rotatingAxis3);
 		//convexFillet.Perform(convexRadius);
 		//Standard_Integer j = convexFillet.NbResults(lobeLoadEdge_1_FirstPoint);
+
+		bool x;
+		//TopoDS_Edge convexFilletEdge = makeFilletsOrChamfers(edgeBeforeLobeLoad, lobeLoad_Edge, lobeLoadEdge_1_FirstPoint, 0.005, rotatingAxis3, x, true);
 		TopoDS_Edge convexFilletEdge = make2dFillet(edgeBeforeLobeLoad, lobeLoad_Edge, lobeLoadEdge_1_FirstPoint, convexRadius, rotatingAxis3);
 		
 
 		if (i == 0)
 		{
-			firstHalfFirTreeEdges.append(edgeBeforeLobeLoad);
+			//firstHalfFirTreeEdges.append(edgeBeforeLobeLoad);
 			neckLineEdge = edgeBeforeLobeLoad;
-			displayASape(neckLineEdge);
+			//displayASape(neckLineEdge);
+		}
+		else
+		{
+			firstHalfFirTreeEdges.insert(0, edgeBeforeLobeLoad);
+			//displayASape(edgeBeforeLobeLoad);
 		}
 
 
@@ -2488,7 +2439,7 @@ void occQt::setFirTree2()
 		//removeDisplaiedAISShape();
 		//displayASape(angle_1_Edge);
 
-		LobeThickness = CenterLineLength * 0.2;
+		LobeThickness = CenterLineLength * 0.1;
 
 		gp_Trsf theTransformationLobeReleaf_Point;
 		theTransformationLobeReleaf_Point.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(LobeThickness));
@@ -2505,79 +2456,51 @@ void occQt::setFirTree2()
 		//displayASape(angle_2_Edge);
 
 
-		//ChFi2d_FilletAPI concaveFillet(lobeLoad_Edge, lobeReleaf_Edge, rotatingAxis3);
-		//concaveFillet.Perform(concaveRadius);
-		//TopoDS_Edge modifiedLobeLoadEdge;
-		//TopoDS_Edge modifiedLobeReleafEdge;
-		//TopoDS_Edge concaveFilletEdge = concaveFillet.Result(LobeLoad_LastPoint, lobeLoad_Edge, lobeReleaf_Edge);
 		TopoDS_Edge concaveFilletEdge = make2dFillet(lobeLoad_Edge, lobeReleaf_Edge, LobeLoad_LastPoint, concaveRadius, rotatingAxis3);
 
 		if (!convexFilletEdge.IsNull())
 		{
 			firstHalfFirTreeEdges.insert(0, convexFilletEdge);
-			displayASape(convexFilletEdge);
+			//displayASape(convexFilletEdge);
 		}
 		
 		firstHalfFirTreeEdges.insert(0, lobeLoad_Edge);
 		firstHalfFirTreeEdges.insert(0, concaveFilletEdge);
-		firstHalfFirTreeEdges.insert(0, lobeReleaf_Edge);
+		//firstHalfFirTreeEdges.insert(0, lobeReleaf_Edge);
 
 		
-		displayASape(lobeLoad_Edge);
-		displayASape(concaveFilletEdge);
-		displayASape(lobeReleaf_Edge);
+		//displayASape(lobeLoad_Edge);
+		//displayASape(concaveFilletEdge);
+		//displayASape(lobeReleaf_Edge);
 
 
 		lastLobeReleaf_LastPoint = lobeReleaf_LastPoint;
 		lobeLoadEdge_1_FirstPoint = lastLobeReleaf_LastPoint;
+		edgeBeforeLobeLoad = lobeReleaf_Edge;
 
 	}
-	//////////////////////////////////////
-	Standard_Real firTreeHeight = CenterLineLength * 0.9;
+
+
+	Standard_Real firTreeHeight = CenterLineLength * 0.7;
 
 	gp_Trsf theTransformationMidBottomPoint;
 	theTransformationMidBottomPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(firTreeHeight));
 
 	gp_Pnt MidBottomFirTreetPoint = firTreeCenterLinePointOnHubBottomCurve.Transformed(theTransformationMidBottomPoint);
 
-	//gp_Pnt MidBottomFirTreetPoint(firTreeCenterLinePointOnHubBottomCurve.X(), lastAngle_2_LastPoint.Y(), firTreeCenterLinePointOnHubBottomCurve.Z());
-
+	
 	Handle(Geom_TrimmedCurve) centerConnectCurve = GC_MakeSegment(lastLobeReleaf_LastPoint, MidBottomFirTreetPoint);
 
 	TopoDS_Edge centerConnectCurveEdge = BRepBuilderAPI_MakeEdge(centerConnectCurve);
+
+
+
+
+	TopoDS_Edge firTreeBottomFillet = make2dFillet(edgeBeforeLobeLoad, centerConnectCurveEdge, lastLobeReleaf_LastPoint, firTreebottomFilletRadius, rotatingAxis3);
+
+	firstHalfFirTreeEdges.insert(0, edgeBeforeLobeLoad);
+	firstHalfFirTreeEdges.insert(0, firTreeBottomFillet);
 	firstHalfFirTreeEdges.insert(0, centerConnectCurveEdge);
-
-	//displayASape(centerConnectCurveEdge);
-
-	//Standard_Real firTreeHeight = CenterLineLength * 0.9;
-
-	//gp_Trsf theTransformationToolMidBottomPoint;
-	//theTransformationToolMidBottomPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(CenterLineLength * 2));
-
-	//gp_Pnt toolMiddBottomPoint = longerCurveCenterPoint.Transformed(theTransformationToolMidBottomPoint);
-
-	//Handle(Geom_TrimmedCurve) centerLastCurve = GC_MakeSegment(MidBottomPointPoint, toolMiddBottomPoint);
-
-	//TopoDS_Edge aEdge6 = BRepBuilderAPI_MakeEdge(centerLastCurve);
-	//displayASape(aEdge6);
-	
-	//gp_Pnt toolUpperHalfLineOuterCurve = toolUperHalfLineCurve->Value(firstParameterOfHabBottemCurve);
-
-	//gp_Pnt toolLastPoint(toolUpperHalfLineOuterCurve.X(), toolMiddBottomPoint.Y(), toolUpperHalfLineOuterCurve.Z());
-
-	//Handle(Geom_TrimmedCurve) toolbottomCurve = GC_MakeSegment(toolMiddBottomPoint, toolLastPoint);
-
-	//TopoDS_Edge aEdge6 = BRepBuilderAPI_MakeEdge(toolbottomCurve);
-
-
-	//displayASape(aEdge6);
-
-	//Handle(Geom_TrimmedCurve) toolSideCurve = GC_MakeSegment(toolLastPoint, toolUpperHalfLineOuterCurve);
-
-	//TopoDS_Edge aEdge7 = BRepBuilderAPI_MakeEdge(toolSideCurve);
-
-	//firstHalfEdges.insert(0, aEdge7);
-	//firstHalfEdges.insert(0, aEdge6);
 
 
 	BRepBuilderAPI_MakeWire wireMaker1;
@@ -2594,6 +2517,7 @@ void occQt::setFirTree2()
 
 
 
+
 	//removeDisplaiedAISShape();
 	//displayASape(halfFirTreeWireProfile);
 
@@ -2603,21 +2527,43 @@ void occQt::setFirTree2()
 	TopoDS_Shape aMirroredShape = aBRepTrsf.Shape();
 	TopoDS_Wire aMirroredWire = TopoDS::Wire(aMirroredShape);
 
+	BRepBuilderAPI_MakeWire mkWire(aMirroredWire);
+	mkWire.Add(halfFirTreeWireProfile);
+	TopoDS_Wire WireProfile = mkWire.Wire();
+
 	//displayASape(aMirroredWire);
+
+	gp_Trsf neckLineTransfer;
+	neckLineTransfer.SetMirror(firTreeCenterAxis);
+	BRepBuilderAPI_Transform neckLine_BRepTrsf(neckLineEdge, neckLineTransfer);
+	TopoDS_Shape MirroredNeckLineShape = neckLine_BRepTrsf.Shape();
+
+	//BRepTools::Write(neckLineEdge, "C:/Users/DELL/Desktop/Cut/neckLineEdge.Brep");
+	//BRepTools::Write(MirroredNeckLineShape, "C:/Users/DELL/Desktop/Cut/MirroredNeckLineShape.Brep");
+
+	TopoDS_Edge MirroredNeckLineEdge = TopoDS::Edge(MirroredNeckLineShape);
+
+
+	TopoDS_Edge firTreeUpperFillet_side1 = make2dFillet(hubSide1HubBottomEdge, neckLineEdge, nearToSide1_neckStartPoint, firTreeupperFilletRadius, rotatingAxis3);
+	TopoDS_Edge firTreeUpperFillet_side2 = make2dFillet(MirroredNeckLineEdge, hubSide2HubBottomEdge, farToside1_neckStartPoint, firTreeupperFilletRadius, rotatingAxis3);
+	
 
 
 	//gp_Pnt pt = longerCurveCenterPoint;
 	//pt.Translate(gp_Vec(faceCenterDirection) * 30);
 
 	//displayASape(BRepBuilderAPI_MakeEdge(longerCurveCenterPoint, pt).Edge());
-	BRepBuilderAPI_MakeWire mkWire(aMirroredWire);
-	mkWire.Add(halfFirTreeWireProfile);
-	TopoDS_Wire WireProfile = mkWire.Wire();
+	
 
 	//removeDisplaiedAISShape();
 	//displayASape(WireProfile);
 
+
 	BRepBuilderAPI_MakeWire cutingToolWireMaker(WireProfile);
+	cutingToolWireMaker.Add(neckLineEdge);
+	cutingToolWireMaker.Add(MirroredNeckLineEdge);
+	cutingToolWireMaker.Add(firTreeUpperFillet_side1);
+	cutingToolWireMaker.Add(firTreeUpperFillet_side2);
 	cutingToolWireMaker.Add(hubSide1HubBottomEdge);
 	cutingToolWireMaker.Add(hubSide2HubBottomEdge);
 	cutingToolWireMaker.Add(hubSide1Edge);
@@ -2636,8 +2582,8 @@ void occQt::setFirTree2()
 	//displayASape(cuttingToolWire);
 
 	TopoDS_Face firTreeCuttingToolFaceProfile = BRepBuilderAPI_MakeFace(cuttingToolWire);
-	removeDisplaiedAISShape();
-	displayASape(firTreeCuttingToolFaceProfile);
+	//removeDisplaiedAISShape();
+	//displayASape(firTreeCuttingToolFaceProfile);
 
 
 	//gp_Vec firstFirTreeCutVector(0, 0, -50);
@@ -2683,17 +2629,17 @@ void occQt::setFirTree2()
 	
 
 	TopoDS_Shape firTreeCuttingTool = BRepPrimAPI_MakePrism(toolFaceProfileTranslatedShape, depthOfFirTree_PrismVec + toleranceVector);
-	removeDisplaiedAISShape();
-	displayASape(firTreeCuttingTool);
+	//removeDisplaiedAISShape();
+	//displayASape(firTreeCuttingTool);
 	TopoDS_Shape depthCuttingTool_FromSelectedFace = BRepPrimAPI_MakePrism(depthCuttingToolFaceProfile, depthFromSelectedFace_PrismVec);
-	displayASape(depthCuttingTool_FromSelectedFace);
+	//displayASape(depthCuttingTool_FromSelectedFace);
 	TopoDS_Shape depthCuttingTool_SelectedFace = BRepPrimAPI_MakePrism(depthCuttingToolFaceTransformedShape, depthFromNextToSelectedFace_PrismVec);
-	displayASape(depthCuttingTool_SelectedFace);
+	//displayASape(depthCuttingTool_SelectedFace);
 
 
-	BRepTools::Write(firTreeCuttingTool, "C:/Users/DELL/Desktop/Cut/firTreeCuttingtoll.Brep");
-	BRepTools::Write(depthCuttingTool_FromSelectedFace, "C:/Users/DELL/Desktop/Cut/depthCuttingTool_FromSelectedFace.Brep");
-	BRepTools::Write(depthCuttingTool_SelectedFace, "C:/Users/DELL/Desktop/Cut/depthCuttingTool_SelectedFace.Brep");
+	//BRepTools::Write(firTreeCuttingTool, "C:/Users/DELL/Desktop/Cut/firTreeCuttingtoll.Brep");
+	//BRepTools::Write(depthCuttingTool_FromSelectedFace, "C:/Users/DELL/Desktop/Cut/depthCuttingTool_FromSelectedFace.Brep");
+	//BRepTools::Write(depthCuttingTool_SelectedFace, "C:/Users/DELL/Desktop/Cut/depthCuttingTool_SelectedFace.Brep");
 	//removeDisplaiedAISShape();
 	//displayASape(firTreeCuttingTool);
 
@@ -2702,67 +2648,75 @@ void occQt::setFirTree2()
 	shape = BRepAlgoAPI_Cut(shape, depthCuttingTool_SelectedFace);
 	shape = BRepAlgoAPI_Cut(shape, firTreeCuttingTool);
 
-	removeDisplaiedAISShape();
-	displayASape(shape);
-
-
-	BRepTools::Write(shape, "C:/Users/DELL/Desktop/Cut/shape.Brep");
-
-	/*
-
-
-	//////////////////////////
-	gp_Trsf translate1;
-	translate1.SetTranslation(depthFromSelectedFace_PrismVec);
-	BRepBuilderAPI_Transform translated(toolFaceProfile, translate1);
-	TopoDS_Shape toolFaceProfileTranslatedShape = translated.Shape();
-	///////////////////////////
-
 	//removeDisplaiedAISShape();
-	displayASape(toolFaceProfileTranslatedShape);
-
-
-	TopoDS_Shape cuttingToolBody_part1 = BRepPrimAPI_MakePrism(selectedFace, depthFromSelectedFace_PrismVec);
-	TopoDS_Shape cuttingToolBody_part2 = BRepPrimAPI_MakePrism(toolFaceProfileTranslatedShape, depthOfFirTree_PrismVec);
-
-	displayASape(cuttingToolBody_part1);
-	displayASape(cuttingToolBody_part2);
-
-	gp_Vec Vec(0, 0, -(firTreeDepthFrom_SelectedFace + firTreeLength));
-	gp_Trsf translate2;
-	translate2.SetTranslation(Vec);
-	BRepBuilderAPI_Transform translated2(selectedFace, translate2);
-	TopoDS_Shape selectedFaceTransformedProfileShape = translated2.Shape();
-	TopoDS_Shape cuttingToolBody_part3 = BRepPrimAPI_MakePrism(selectedFaceTransformedProfileShape, depthFromNextToSelectedFace_PrismVec);
-
-	TopoDS_Compound cuttingToolBody;
-	BRep_Builder aBuilder;
-	aBuilder.MakeCompound(cuttingToolBody);
-	aBuilder.Add(cuttingToolBody, cuttingToolBody_part1);
-	aBuilder.Add(cuttingToolBody, cuttingToolBody_part2);
-	aBuilder.Add(cuttingToolBody, cuttingToolBody_part3);
-
-
-	removeDisplaiedAISShape();
-	displayASape(cuttingToolBody);
-
-	
-
-	//displayASape(shape);
-
-	shape = BRepAlgoAPI_Cut(shape, cuttingToolBody);
-
-	removeDisplaiedAISShape();
 	displayASape(shape);
 
-	*/
+	int nMilliseconds = myTimer.elapsed();
+	BRepTools::Write(shape, "C:/Users/DELL/Desktop/Cut/Sample_2.Brep");
+
 	
 }
 
+void occQt::setFilletMode()
+{
+	if (!edgeSelectModeEnabled)
+	{
+		myOccView->getContext()->ActivateStandardMode(TopAbs_EDGE);
+		edgeSelectModeEnabled = true;
+	}
+	else
+	{
+		myOccView->getContext()->ActivateStandardMode(TopAbs_FACE);
+		edgeSelectModeEnabled = false;
+	}
+}
+
+void occQt::setFillet()
+{
+	/* get the imported blade shape to the parameter shape*/
+	TopoDS_Shape shape;
+	AIS_ListOfInteractive objList;
+	myOccView->getContext()->DisplayedObjects(objList);
+	AIS_ListIteratorOfListOfInteractive iter;
+	for (iter.Initialize(objList); iter.More(); iter.Next())
+	{
+		Handle(AIS_InteractiveObject) aisShp = iter.Value();
+		if (aisShp->IsKind("AIS_Shape"))
+		{
+			shape = Handle(AIS_Shape)::DownCast(aisShp)->Shape();
+		}
+	}
+
+	//removeDisplaiedAISShape();
+	//displayASape(shape);
+
+	/* get the selected edge to the parameter selectedEdge*/
+	TopoDS_Shape selectedShape;
+	myOccView->getContext()->InitSelected();
+	selectedShape = myOccView->getContext()->SelectedShape();
+	TopoDS_Edge selectedEdge = TopoDS::Edge(selectedShape);
+
+	//removeDisplaiedAISShape();
+	//displayASape(selectedEdge);
+
+	BRepFilletAPI_MakeFillet filletMaker(shape);
+
+	Standard_Real radiuse = 0.5;
+
+	filletMaker.Add(radiuse, selectedEdge);
+
+	TopoDS_Shape shape2 = filletMaker.Shape();
+
+	removeDisplaiedAISShape();
+	displayASape(shape2);
+
+}
+
+
 TopoDS_Edge occQt::make2dFillet(TopoDS_Edge& e1, TopoDS_Edge& e2, gp_Pnt CommonPoint, Standard_Real r, gp_Ax3 thePlane)
 {
-	//ChFi2d_FilletAPI fillet(e1, e2, thePlane);
-	ChFi2d_FilletAlgo fillet(e1, e2, thePlane);
+	ChFi2d_FilletAPI fillet(e1, e2, thePlane);
+//	ChFi2d_FilletAlgo fillet(e1, e2, thePlane);
 	fillet.Perform(r);
 	Standard_Integer j = fillet.NbResults(CommonPoint);
 	TopoDS_Edge filletEdge;
@@ -2773,11 +2727,178 @@ TopoDS_Edge occQt::make2dFillet(TopoDS_Edge& e1, TopoDS_Edge& e2, gp_Pnt CommonP
 	return filletEdge;
 }
 
+TopoDS_Edge occQt::makeFilletsOrChamfers(TopoDS_Edge &edge1, TopoDS_Edge &edge2, gp_Pnt commonPoint, double filletRadius, gp_Pln plane, bool &isDone, bool isFillet)
+{
+	TopoDS_Edge fillet;
+	isDone = false;
+	ChFi2d_FilletAlgo filletAlgo;
+	if (filletRadius>1e-10)
+	{
+		filletAlgo.Init(edge1, edge2, plane);
+		filletAlgo.Perform(filletRadius);
+		int results = filletAlgo.NbResults(commonPoint);
+		TopoDS_Edge trimmedEdge1, trimmedEdge2;
+		if (results == 1)
+		{
+			fillet = filletAlgo.Result(commonPoint, trimmedEdge1, trimmedEdge2);
+			edge1 = trimmedEdge1;
+			edge2 = trimmedEdge2;
+			isDone = true;
+		}
+		else
+		{
+			//ccl::cmessage::logmessage("Failed to create blisk fillet");
+			//throw new AxiProgressException();
+		}
+	}
+	else
+	{
+		//ccl::cmessage::logmessage("Failed to create blisk fillet");
+		//throw new AxiProgressException();
+	}
+	if (!isFillet && isDone) {
+		gp_Pnt p1 = BRep_Tool::Pnt(TopExp::FirstVertex(fillet));
+		gp_Pnt p2 = BRep_Tool::Pnt(TopExp::LastVertex(fillet));
+		//Handle_Geom_Curve curve = makeBSplineCrvFromTwoPoints(p1, p2);
+		//return BRepBuilderAPI_MakeEdge(curve);
+	}
+	else
+		return fillet;
+}
+
+void occQt::make2dFilletMy(TopoDS_Edge e1, TopoDS_Edge e2)
+{
+	TopoDS_Edge edge1 = e1;
+	TopoDS_Edge edge2 = e2;
+
+
+
+}
 
 
 void occQt::Checker()
 {
+	
+	gp_Pnt a(1,13,0);
+	gp_Pnt b(1, 10, 0);
+	gp_Pnt c(10, 500, 0);
 
+	TopoDS_Edge aEdge1 = BRepBuilderAPI_MakeEdge(a, b);
+	TopoDS_Edge aEdge2 = BRepBuilderAPI_MakeEdge(a, c);
+
+
+
+	gp_Dir zDir(0, 0, 1);
+	gp_Ax2 rotatingAxis2(a, zDir);
+	gp_Ax3 rotatingAxis3(rotatingAxis2);
+
+	//TopoDS_Edge filet = make2dFillet(aEdge1, aEdge2, a, 0.005, rotatingAxis3);
+	bool x;
+	TopoDS_Edge filet = makeFilletsOrChamfers(aEdge1, aEdge2, a, 0.05, rotatingAxis3, x, true);
+	
+
+	//displayASape(aEdge1);
+	//displayASape(filet);
+	//displayASape(aEdge2);
+
+	
+	gp_Dir d(0,-1,0);
+	gp_Vec vec(d);
+	
+
+	gp_Pnt lastLobeReleaf_LastPoint;
+	gp_Pnt lobeLoadEdge_1_FirstPoint = b;
+	TopoDS_Edge edgeBeforeLobeLoad = aEdge1;
+	TopoDS_Edge lastLobeReleaf;
+
+	for (int i = 0; i < 4; i++)
+	{
+		Standard_Real LobeLoadLength = (1 - (0.15*i));
+
+		gp_Trsf theTransformationLobeLoadEdge_1_Point;
+		//gp_Vec centerUnitVector(faceCenterDirection);
+		theTransformationLobeLoadEdge_1_Point.SetTranslation(vec.Multiplied(LobeLoadLength));
+
+		gp_Pnt angleLastPointBefore = lobeLoadEdge_1_FirstPoint.Transformed(theTransformationLobeLoadEdge_1_Point);
+
+		//gp_Pnt aOrigin(0, 0, 0);
+		gp_Dir zDir(0, 0, 1);
+		gp_Ax1 neckEndPointAxis(lobeLoadEdge_1_FirstPoint, zDir);
+
+		gp_Pnt LobeLoad_LastPoint = angleLastPointBefore.Rotated(neckEndPointAxis, ((3.141 * 2.5) / 6));
+
+		Handle(Geom_TrimmedCurve) LobeLoad_Curve = GC_MakeSegment(lobeLoadEdge_1_FirstPoint, LobeLoad_LastPoint);
+
+		
+		TopoDS_Edge lobeLoad_Edge = BRepBuilderAPI_MakeEdge(lobeLoadEdge_1_FirstPoint, LobeLoad_LastPoint);
+
+		//ChFi2d_FilletAPI convexFillet(edgeBeforeLobeLoad, lobeLoad_Edge, rotatingAxis3);
+		//convexFillet.Perform(convexRadius);
+		//Standard_Integer j = convexFillet.NbResults(lobeLoadEdge_1_FirstPoint);
+
+		bool x;
+		TopoDS_Edge convexFilletEdge = makeFilletsOrChamfers(edgeBeforeLobeLoad, lobeLoad_Edge, lobeLoadEdge_1_FirstPoint, 0.005, rotatingAxis3, x, true);
+		//TopoDS_Edge convexFilletEdge = make2dFillet(edgeBeforeLobeLoad, lobeLoad_Edge, lobeLoadEdge_1_FirstPoint, 0.5, rotatingAxis3);
+
+
+		if (i == 0)
+		{
+			//firstHalfFirTreeEdges.append(edgeBeforeLobeLoad);
+			aEdge1 = edgeBeforeLobeLoad;
+			displayASape(aEdge1);
+		}
+		else
+		{
+			displayASape(edgeBeforeLobeLoad);
+		}
+
+
+		//firstHalfFirTreeEdges.insert(0, lobeLoad_Edge);
+
+		//removeDisplaiedAISShape();
+		//displayASape(angle_1_Edge);
+
+		Standard_Real LobeThickness = 1;
+
+		gp_Trsf theTransformationLobeReleaf_Point;
+		theTransformationLobeReleaf_Point.SetTranslation(vec.Multiplied(LobeThickness));
+
+		gp_Pnt lobeReleaf_LastPoint = lobeLoadEdge_1_FirstPoint.Transformed(theTransformationLobeReleaf_Point);
+
+		Handle(Geom_TrimmedCurve) lobeReleaf_Curve = GC_MakeSegment(LobeLoad_LastPoint, lobeReleaf_LastPoint);
+
+		TopoDS_Edge lobeReleaf_Edge = BRepBuilderAPI_MakeEdge(LobeLoad_LastPoint, lobeReleaf_LastPoint);
+
+		//firstHalfFirTreeEdges.insert(0, lobeReleaf_Edge);
+
+		//removeDisplaiedAISShape();
+		//displayASape(angle_2_Edge);
+
+
+		TopoDS_Edge concaveFilletEdge = make2dFillet(lobeLoad_Edge, lobeReleaf_Edge, LobeLoad_LastPoint, 0.005, rotatingAxis3);
+
+		if (!convexFilletEdge.IsNull())
+		{
+			//firstHalfFirTreeEdges.insert(0, convexFilletEdge);
+			displayASape(convexFilletEdge);
+		}
+
+		//firstHalfFirTreeEdges.insert(0, lobeLoad_Edge);
+		//firstHalfFirTreeEdges.insert(0, concaveFilletEdge);
+		//firstHalfFirTreeEdges.insert(0, lobeReleaf_Edge);
+
+
+		displayASape(lobeLoad_Edge);
+		displayASape(concaveFilletEdge);
+		//displayASape(lobeReleaf_Edge);
+
+
+		lastLobeReleaf_LastPoint = lobeReleaf_LastPoint;
+		lobeLoadEdge_1_FirstPoint = lastLobeReleaf_LastPoint;
+		edgeBeforeLobeLoad = lobeReleaf_Edge;
+
+	}
+	
 }
 
 

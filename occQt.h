@@ -104,6 +104,11 @@ private slots:
 	void setFirTree(void);
 
 	void setFirTree2(void);
+
+	void Checker(void);
+
+	void setFilletMode(void);
+	void setFillet(void);
 	
 
 
@@ -130,7 +135,10 @@ private:
 
 	TopoDS_Edge make2dFillet(TopoDS_Edge& e1, TopoDS_Edge& e2, gp_Pnt CommonPoint, Standard_Real r, gp_Ax3 thePlane);
 
-	void Checker(void);
+	TopoDS_Edge makeFilletsOrChamfers(TopoDS_Edge &edge1, TopoDS_Edge &edge2, gp_Pnt commonPoint, double filletRadius, gp_Pln plane, bool &isDone, bool isFillet);
+
+	void make2dFilletMy(TopoDS_Edge e1, TopoDS_Edge e2);
+	
 
 private:
     //! the exit action.
@@ -176,6 +184,10 @@ private:
 
 	QAction* firTreeAction;
 
+	QAction* setFilletModeAction;
+	QAction* setFilletAction;
+
+
 	QAction* checkerAction;
 
     //! show the about info action.
@@ -211,6 +223,8 @@ private:
 	bool isFilletedBox;
 	bool isDrilledBox;
 	//double drillin
+
+	bool edgeSelectModeEnabled = false;
 
 
 
