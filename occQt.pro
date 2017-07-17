@@ -13,13 +13,15 @@ TEMPLATE = app
 
 SOURCES += main.cpp \
     occQt.cpp       \
-    occView.cpp
+    occView.cpp		\
+	FirTreeCreator.cpp
 
 CONFIG += c++11
 
 HEADERS  += \
     occQt.h \
-    occView.h
+    occView.h \
+	FirTreeCreator.h
 
 FORMS    += \
     occQt.ui

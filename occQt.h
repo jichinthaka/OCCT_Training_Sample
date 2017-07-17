@@ -105,6 +105,8 @@ private slots:
 
 	void setFirTree2(void);
 
+	void setFirTree3(void);
+
 	void Checker(void);
 
 	void setFilletMode(void);
@@ -184,6 +186,8 @@ private:
 
 	QAction* firTreeAction;
 
+	//QAction* setFirTreeAction;
+
 	QAction* setFilletModeAction;
 	QAction* setFilletAction;
 
@@ -225,6 +229,7 @@ private:
 	//double drillin
 
 	bool edgeSelectModeEnabled = false;
+	Standard_Real f;
 
 
 

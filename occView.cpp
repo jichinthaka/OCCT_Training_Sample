@@ -135,6 +135,7 @@ void OccView::init()
 	myContext->ActivateStandardMode(TopAbs_FACE);
 
 	//myContext->SetColor()
+	
 }
 
 const Handle_AIS_InteractiveContext OccView::getContext() const
