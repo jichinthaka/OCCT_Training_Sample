@@ -2203,18 +2203,13 @@ void occQt::setFirTree2()
 	/* create innner hub serface*/
 	Handle(Geom_TrimmedCurve) hubBottomFaceCurve = GC_MakeArcOfCircle(point1, point3, point2);
 	
-
 	Handle(Geom_TrimmedCurve) hubSide1Curve = GC_MakeSegment(firstParameterSideLongCurveCuttingEgdgePoint_CuttingTool, point1);
 	Handle(Geom_TrimmedCurve) hubSide2Curve = GC_MakeSegment(lastParameterSideLongCurveCuttingEgdgePoint_CuttingTool, point2);
 
 	TopoDS_Edge hubSide1Edge = BRepBuilderAPI_MakeEdge(hubSide1Curve);
 	TopoDS_Edge hubSide2Edge = BRepBuilderAPI_MakeEdge(hubSide2Curve);
 
-
-	/* find the parameter values of first, last and blade center and firTree Center on bottom hubface curve*/
-	Standard_Real parameterHubBottomCurveOnBladeCenter;
-	GeomLib_Tool::Parameter(hubBottomFaceCurve, point3, 1e-7, parameterHubBottomCurveOnBladeCenter);
-
+	/* find the parameter values of first, last and firTree Center on bottom hubface curve*/
 	Standard_Real hubSide1ParameterOnHubBottomFaceCurve;
 	GeomLib_Tool::Parameter(hubBottomFaceCurve, point1, 1e-7, hubSide1ParameterOnHubBottomFaceCurve);
 
@@ -2222,9 +2217,6 @@ void occQt::setFirTree2()
 	GeomLib_Tool::Parameter(hubBottomFaceCurve, point2, 1e-7, hubSide2ParameterOnHubBottomFaceCurve);
 
 	gp_Pnt firTreeCenterLinePointOnHubBottomCurve = point3.Rotated(rotatingAxis, A3);
-	Standard_Real parameterfirTreeCenterLinePointOnHubBottomCurve;
-	GeomLib_Tool::Parameter(hubBottomFaceCurve, firTreeCenterLinePointOnHubBottomCurve, 1e-7, parameterfirTreeCenterLinePointOnHubBottomCurve);
-	
 
 	gp_Vec firTreeCenterToZAxisLine_Vector(firTreeCenterLinePointOnHubBottomCurve, rotatingAxisPointForSelectedPlane);
 	gp_Dir firTreeCenterToZAxisLine_VectorDirection(firTreeCenterToZAxisLine_Vector);

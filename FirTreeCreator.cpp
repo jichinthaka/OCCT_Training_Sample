@@ -13,6 +13,8 @@
 #include <BRepBuilderAPI_MakeWire.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
+#include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepBuilderAPI_Transform.hxx>
 #include <BRep_Tool.hxx>
 #include <BRepGProp.hxx>
 #include <BRepTools.hxx>
@@ -24,16 +26,19 @@
 #include <Geom_TrimmedCurve.hxx>
 #include <GeomLProp_CLProps.hxx>
 #include <GeomLib_Tool.hxx>
+#include <GeomConvert.hxx>
 
 #include <GProp_GProps.hxx>
 
+#include <ChFi2d_FilletAPI.hxx>
+
+#include <QMessageBox>
 
 
 FirTreeCreator::FirTreeCreator(Handle_AIS_InteractiveContext context)
 {
 	myContext = context;
 }
-
 
 FirTreeCreator::~FirTreeCreator()
 {
@@ -104,19 +109,448 @@ TopoDS_Shape FirTreeCreator::build()
 		firstParameterSideLongCurveCuttingEdgePoint, lastParameterSideLongCurveCuttingEdgePoint, point1, point2);
 	
 	/* creat a deapth cutting tool face*/
-	TopoDS_Wire DepthCuttingToolFaceWire = creat_DepthCuttingToolFaceWire(CuttingToolWire_WithHubThickness, point1, point2);
+	TopoDS_Wire DepthCuttingToolFaceWire = create_DepthCuttingToolFaceWire(CuttingToolWire_WithHubThickness, point1, point2);
 
-
+	TopoDS_Wire firTreeCuttingToolFaceWire = create_firTree2_CuttingToolFaceWire(CuttingToolWire_WithHubThickness, point1, point2);
 
 	
+	TopoDS_Face myFaceProfile = BRepBuilderAPI_MakeFace(firTreeCuttingToolFaceWire);
 
 
 
-
-	return DepthCuttingToolFaceWire;
+	return myFaceProfile;
 }
 
-TopoDS_Wire FirTreeCreator::creat_DepthCuttingToolFaceWire(TopoDS_Wire CuttingToolWire_WithHubThickness, gp_Pnt point1, gp_Pnt point2)
+
+
+/* 2D fillet making is in seperatly with this function for firTree creation because ChFi2d_FilletAPI does not work 
+	for some conditions. If so, we can change the 2D filleting way hear*/
+TopoDS_Edge FirTreeCreator::make2dFillet(TopoDS_Edge& e1, TopoDS_Edge& e2, gp_Pnt CommonPoint, Standard_Real r, gp_Ax3 thePlane)
+{
+	ChFi2d_FilletAPI fillet(e1, e2, thePlane);
+	fillet.Perform(r);
+	Standard_Integer j = fillet.NbResults(CommonPoint);
+	TopoDS_Edge filletEdge;
+	if (j == 1)
+	{
+		filletEdge = fillet.Result(CommonPoint, e1, e2);
+	}
+	return filletEdge;
+}
+
+TopoDS_Wire FirTreeCreator::create_firTree2_CuttingToolFaceWire(TopoDS_Wire CuttingToolWire_WithHubThickness, gp_Pnt point1, gp_Pnt point2)
+{
+	gp_Dir bladeCenterLine_Direction(badeAxisLineVector);
+	gp_Vec bladeCenterLine_UnitVector(bladeCenterLine_Direction);
+
+	gp_Trsf theTransformation_bladeCenterPoint;
+	theTransformation_bladeCenterPoint.SetTranslation(bladeCenterLine_UnitVector.Multiplied(hubThickness));
+	gp_Pnt point3 = bladeAxisPointOnHubSerface.Transformed(theTransformation_bladeCenterPoint);
+
+	Handle(Geom_TrimmedCurve) hubBottomFaceCurve = GC_MakeArcOfCircle(point1, point3, point2);
+
+	/* find the parameter values of first, last and firTree Center on bottom hubface curve*/
+	Standard_Real hubSide1ParameterOnHubBottomFaceCurve;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, point1, 1e-7, hubSide1ParameterOnHubBottomFaceCurve);
+
+	Standard_Real hubSide2ParameterOnHubBottomFaceCurve;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, point2, 1e-7, hubSide2ParameterOnHubBottomFaceCurve);
+
+	gp_Pnt firTreeCenterLinePointOnHubBottomCurve = point3.Rotated(rotatingAxis, A3);
+
+	gp_Vec firTreeCenterToZAxisLine_Vector(firTreeCenterLinePointOnHubBottomCurve, rotatingAxisPointForSelectedPlane);
+	gp_Dir firTreeCenterToZAxisLine_VectorDirection(firTreeCenterToZAxisLine_Vector);
+	gp_Vec firTreeCenterToZAxisLine_UnitVector(firTreeCenterToZAxisLine_VectorDirection);
+	gp_Ax1 firTreeCenterAxis(firTreeCenterLinePointOnHubBottomCurve, firTreeCenterToZAxisLine_Vector);
+
+	/* find the neck start points on botton neck surface*/
+	gp_Pnt nearToSide1_neckStartPoint = point3.Rotated(rotatingAxis, A3 - (A4 / 2));
+	Standard_Real parameterNearToSide1_neckStartPoint;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, nearToSide1_neckStartPoint, 1e-7, parameterNearToSide1_neckStartPoint);
+
+	gp_Pnt farToside1_neckStartPoint = point3.Rotated(rotatingAxis, A3 + (A4 / 2));
+	Standard_Real parameterFarToSide1_neckStartPoint;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, farToside1_neckStartPoint, 1e-7, parameterFarToSide1_neckStartPoint);
+
+	gp_Pnt neckStartPoint = nearToSide1_neckStartPoint;
+
+	Handle(Geom_Curve) hubSide1HubBottomCurve = new Geom_TrimmedCurve(hubBottomFaceCurve, hubSide1ParameterOnHubBottomFaceCurve, parameterNearToSide1_neckStartPoint);
+	Handle(Geom_Curve) hubSide2HubBottomCurve = new Geom_TrimmedCurve(hubBottomFaceCurve, parameterFarToSide1_neckStartPoint, hubSide2ParameterOnHubBottomFaceCurve);
+
+	hubSide1HubBottomCurve = GeomConvert::CurveToBSplineCurve(hubSide1HubBottomCurve);
+	hubSide2HubBottomCurve = GeomConvert::CurveToBSplineCurve(hubSide2HubBottomCurve);
+
+	TopoDS_Edge hubSide1HubBottomEdge = BRepBuilderAPI_MakeEdge(hubSide1HubBottomCurve);
+	TopoDS_Edge hubSide2HubBottomEdge = BRepBuilderAPI_MakeEdge(hubSide2HubBottomCurve);
+
+	neckHeight = givenPlatFormHight * 0.3; // assume the neck height as a fraction of the given platform height, just for hard cordding
+
+	gp_Trsf theTransformationNeckPoint;
+	theTransformationNeckPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(neckHeight));
+	gp_Pnt neckEndPointOnCenterAxis = firTreeCenterLinePointOnHubBottomCurve.Transformed(theTransformationNeckPoint);
+
+	bottomNeckWidth = givenPlatFormHight * 0.1;	// assume the bottomNeckWidth as a fraction of the given platform height, just for hard cordding
+
+	gp_Trsf theTransformationNeckEndPoint;
+	theTransformationNeckEndPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(bottomNeckWidth));
+	gp_Pnt neckEndPointBeforeRotate = neckEndPointOnCenterAxis.Transformed(theTransformationNeckEndPoint);
+
+	gp_Ax1 neckEndPointAxisOnCenterAxis(neckEndPointOnCenterAxis, gp::DZ());
+	gp_Pnt neckEndPoint = neckEndPointBeforeRotate.Rotated(neckEndPointAxisOnCenterAxis, M_PI_2);
+
+	Handle(Geom_TrimmedCurve) neckLineCurve = GC_MakeSegment(neckStartPoint, neckEndPoint);
+
+	TopoDS_Edge neckLineEdge = BRepBuilderAPI_MakeEdge(neckLineCurve);
+
+	QVector<TopoDS_Edge> firstHalfFirTreeEdges;
+
+	gp_Pnt lastLobeReleaf_LastPoint;
+	gp_Pnt lobeLoadEdge_1_FirstPointOnCenterAxis = neckEndPointOnCenterAxis;
+	gp_Pnt lobeLoadEdge_1_FirstPoint = neckEndPoint;
+	TopoDS_Edge edgeBeforeLobeLoad = neckLineEdge;
+	TopoDS_Edge lastLobeReleaf;
+
+	for (int i = 0; i < (numberOfLobes); i++)
+	{
+		// assume the lobe Load Length as a fraction of the given platform height, just for hard cordding
+		Standard_Real lobeLoadLength = givenPlatFormHight * (0.6 - (0.15*i));
+
+		//*********don't delete following commented line. In real, we use that instead of above one.
+		//Standard_Real lobeLoadLength = lobeLoadLengths.value(i);
+
+		gp_Trsf theTransformationLobeLoadEdge_1_Point;
+		theTransformationLobeLoadEdge_1_Point.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(lobeLoadLength));
+
+		gp_Pnt angleLastPointBefore = lobeLoadEdge_1_FirstPoint.Transformed(theTransformationLobeLoadEdge_1_Point);
+
+		gp_Ax1 neckEndPointAxis(lobeLoadEdge_1_FirstPoint, gp::DZ());
+
+		gp_Pnt LobeLoad_LastPoint = angleLastPointBefore.Rotated(neckEndPointAxis, lobeLodeAngle);
+
+		Handle(Geom_TrimmedCurve) LobeLoad_Curve = GC_MakeSegment(lobeLoadEdge_1_FirstPoint, LobeLoad_LastPoint);
+
+		TopoDS_Edge lobeLoad_Edge = BRepBuilderAPI_MakeEdge(LobeLoad_Curve);
+
+		TopoDS_Edge convexFilletEdge = make2dFillet(edgeBeforeLobeLoad, lobeLoad_Edge, lobeLoadEdge_1_FirstPoint, convexRadius, rotatingAxis3);
+
+
+		if (i == 0)
+		{
+			neckLineEdge = edgeBeforeLobeLoad;
+			BRepTools::Write(neckLineEdge, "C:/Users/DELL/Desktop/neck.brep");
+		}
+		else
+		{
+			firstHalfFirTreeEdges.insert(0, edgeBeforeLobeLoad);
+			BRepTools::Write(edgeBeforeLobeLoad, "C:/Users/DELL/Desktop/edgeBeforeLobeLoad.brep");
+		}
+
+		// assume the Lobe Thickness as a fraction of the given platform height, just for hard cordding
+		Standard_Real lobeThickness = givenPlatFormHight * 0.3;
+
+		//*********don't delete following commented line. In real, we use that instead of above one.
+		//Standard_Real lobeThickness = lobeThicknesses.value(i);
+
+		gp_Trsf theTransformationLobeReleaf_PointOnCenterAxis;
+		theTransformationLobeReleaf_PointOnCenterAxis.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(lobeThickness));
+		gp_Pnt lobeReleaf_LastPointOnCenterAxis = lobeLoadEdge_1_FirstPointOnCenterAxis.Transformed(theTransformationLobeReleaf_PointOnCenterAxis);
+
+		// assume the Lobe releafBottomWidth as a fraction of the given platform height, just for hard cordding
+		Standard_Real releafBottomWidth = givenPlatFormHight * (0.11-(0.01*i));
+
+		//*********don't delete following commented line. In real, we use that instead of above one.
+		//Standard_Real releafBottomWidth = releafBottomWidths.value(i);
+
+		gp_Trsf theTransformationFobeReleaf_LastPoint;
+		theTransformationFobeReleaf_LastPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(releafBottomWidth));
+		gp_Pnt lobeReleaf_LastPointBeforeRotate = lobeReleaf_LastPointOnCenterAxis.Transformed(theTransformationFobeReleaf_LastPoint);
+
+		gp_Ax1 lobeReleaf_LastPointAxisOnCenterAxis(lobeReleaf_LastPointOnCenterAxis, gp::DZ());
+		gp_Pnt lobeReleaf_LastPoint = lobeReleaf_LastPointBeforeRotate.Rotated(lobeReleaf_LastPointAxisOnCenterAxis, M_PI_2);
+
+		Handle(Geom_TrimmedCurve) lobeReleaf_Curve = GC_MakeSegment(LobeLoad_LastPoint, lobeReleaf_LastPoint);
+
+		TopoDS_Edge lobeReleaf_Edge = BRepBuilderAPI_MakeEdge(lobeReleaf_Curve);
+
+
+		TopoDS_Edge concaveFilletEdge = make2dFillet(lobeLoad_Edge, lobeReleaf_Edge, LobeLoad_LastPoint, concaveRadius, rotatingAxis3);
+
+		if (!convexFilletEdge.IsNull())
+		{
+			firstHalfFirTreeEdges.insert(0, convexFilletEdge);
+		}
+
+		firstHalfFirTreeEdges.insert(0, lobeLoad_Edge);
+		firstHalfFirTreeEdges.insert(0, concaveFilletEdge);
+
+		lastLobeReleaf_LastPoint = lobeReleaf_LastPoint;
+		lobeLoadEdge_1_FirstPoint = lastLobeReleaf_LastPoint;
+		edgeBeforeLobeLoad = lobeReleaf_Edge;
+		lobeLoadEdge_1_FirstPointOnCenterAxis = lobeReleaf_LastPointOnCenterAxis;
+
+	}
+
+	gp_Pnt MidBottomFirTreetPoint = lobeLoadEdge_1_FirstPointOnCenterAxis;
+
+	Handle(Geom_TrimmedCurve) centerConnectCurve = GC_MakeSegment(lastLobeReleaf_LastPoint, MidBottomFirTreetPoint);
+
+	TopoDS_Edge centerConnectCurveEdge = BRepBuilderAPI_MakeEdge(centerConnectCurve);
+
+	TopoDS_Edge firTreeBottomFillet = make2dFillet(edgeBeforeLobeLoad, centerConnectCurveEdge, lastLobeReleaf_LastPoint, firTreebottomFilletRadius, rotatingAxis3);
+
+	firstHalfFirTreeEdges.insert(0, edgeBeforeLobeLoad);
+	firstHalfFirTreeEdges.insert(0, firTreeBottomFillet);
+	firstHalfFirTreeEdges.insert(0, centerConnectCurveEdge);
+
+
+	BRepBuilderAPI_MakeWire wireMaker1;
+
+	for (int i = 0; i < firstHalfFirTreeEdges.length();i++)
+	{
+		wireMaker1.Add(firstHalfFirTreeEdges.at(i));
+	}
+
+	TopoDS_Wire halfFirTreeWireProfile = wireMaker1.Wire();
+
+	gp_Trsf aTrsf;
+	aTrsf.SetMirror(firTreeCenterAxis);
+	BRepBuilderAPI_Transform aBRepTrsf(halfFirTreeWireProfile, aTrsf);
+	TopoDS_Shape aMirroredShape = aBRepTrsf.Shape();
+	TopoDS_Wire aMirroredWire = TopoDS::Wire(aMirroredShape);
+
+	BRepBuilderAPI_MakeWire mkWire(aMirroredWire);
+	mkWire.Add(halfFirTreeWireProfile);
+	TopoDS_Wire WireProfile = mkWire.Wire();
+
+	gp_Trsf neckLineTransfer;
+	neckLineTransfer.SetMirror(firTreeCenterAxis);
+	BRepBuilderAPI_Transform neckLine_BRepTrsf(neckLineEdge, neckLineTransfer);
+	TopoDS_Shape MirroredNeckLineShape = neckLine_BRepTrsf.Shape();
+
+	TopoDS_Edge MirroredNeckLineEdge = TopoDS::Edge(MirroredNeckLineShape);
+
+
+	TopoDS_Edge firTreeUpperFillet_side1 = make2dFillet(hubSide1HubBottomEdge, neckLineEdge, nearToSide1_neckStartPoint, firTreeupperFilletRadius, rotatingAxis3);
+	TopoDS_Edge firTreeUpperFillet_side2 = make2dFillet(MirroredNeckLineEdge, hubSide2HubBottomEdge, farToside1_neckStartPoint, firTreeupperFilletRadius, rotatingAxis3);
+
+
+	BRepBuilderAPI_MakeWire cutingToolWireMaker(WireProfile);
+	cutingToolWireMaker.Add(MirroredNeckLineEdge);
+	cutingToolWireMaker.Add(firTreeUpperFillet_side2);
+	cutingToolWireMaker.Add(hubSide2HubBottomEdge);
+	cutingToolWireMaker.Add(CuttingToolWire_WithHubThickness);
+	cutingToolWireMaker.Add(hubSide1HubBottomEdge);
+	cutingToolWireMaker.Add(firTreeUpperFillet_side1);
+	cutingToolWireMaker.Add(neckLineEdge);
+
+	TopoDS_Wire firTreeCuttingToolFaceWire = cutingToolWireMaker.Wire();
+	return firTreeCuttingToolFaceWire;
+}
+
+TopoDS_Wire FirTreeCreator::create_firTree1_CuttingToolFaceWire(TopoDS_Wire CuttingToolWire_WithHubThickness, gp_Pnt point1, gp_Pnt point2)
+{
+	gp_Dir bladeCenterLine_Direction(badeAxisLineVector);
+	gp_Vec bladeCenterLine_UnitVector(bladeCenterLine_Direction);
+
+	gp_Trsf theTransformation_bladeCenterPoint;
+	theTransformation_bladeCenterPoint.SetTranslation(bladeCenterLine_UnitVector.Multiplied(hubThickness));
+	gp_Pnt point3 = bladeAxisPointOnHubSerface.Transformed(theTransformation_bladeCenterPoint);
+
+	Handle(Geom_TrimmedCurve) hubBottomFaceCurve = GC_MakeArcOfCircle(point1, point3, point2);
+
+	/* find the parameter values of first, last and firTree Center on bottom hubface curve*/
+	Standard_Real hubSide1ParameterOnHubBottomFaceCurve;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, point1, 1e-7, hubSide1ParameterOnHubBottomFaceCurve);
+
+	Standard_Real hubSide2ParameterOnHubBottomFaceCurve;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, point2, 1e-7, hubSide2ParameterOnHubBottomFaceCurve);
+
+	gp_Pnt firTreeCenterLinePointOnHubBottomCurve = point3.Rotated(rotatingAxis, A3);
+
+	gp_Vec firTreeCenterToZAxisLine_Vector(firTreeCenterLinePointOnHubBottomCurve, rotatingAxisPointForSelectedPlane);
+	gp_Dir firTreeCenterToZAxisLine_VectorDirection(firTreeCenterToZAxisLine_Vector);
+	gp_Vec firTreeCenterToZAxisLine_UnitVector(firTreeCenterToZAxisLine_VectorDirection);
+	gp_Ax1 firTreeCenterAxis(firTreeCenterLinePointOnHubBottomCurve, firTreeCenterToZAxisLine_Vector);
+
+	/* find the neck start points on botton neck surface*/
+	gp_Pnt nearToSide1_neckStartPoint = point3.Rotated(rotatingAxis, A3 - (A4 / 2));
+	Standard_Real parameterNearToSide1_neckStartPoint;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, nearToSide1_neckStartPoint, 1e-7, parameterNearToSide1_neckStartPoint);
+
+	gp_Pnt farToside1_neckStartPoint = point3.Rotated(rotatingAxis, A3 + (A4 / 2));
+	Standard_Real parameterFarToSide1_neckStartPoint;
+	GeomLib_Tool::Parameter(hubBottomFaceCurve, farToside1_neckStartPoint, 1e-7, parameterFarToSide1_neckStartPoint);
+
+	gp_Pnt neckStartPoint = nearToSide1_neckStartPoint;
+
+	Handle(Geom_Curve) hubSide1HubBottomCurve = new Geom_TrimmedCurve(hubBottomFaceCurve, hubSide1ParameterOnHubBottomFaceCurve, parameterNearToSide1_neckStartPoint);
+	Handle(Geom_Curve) hubSide2HubBottomCurve = new Geom_TrimmedCurve(hubBottomFaceCurve, parameterFarToSide1_neckStartPoint, hubSide2ParameterOnHubBottomFaceCurve);
+
+	hubSide1HubBottomCurve = GeomConvert::CurveToBSplineCurve(hubSide1HubBottomCurve);
+	hubSide2HubBottomCurve = GeomConvert::CurveToBSplineCurve(hubSide2HubBottomCurve);
+
+	TopoDS_Edge hubSide1HubBottomEdge = BRepBuilderAPI_MakeEdge(hubSide1HubBottomCurve);
+	TopoDS_Edge hubSide2HubBottomEdge = BRepBuilderAPI_MakeEdge(hubSide2HubBottomCurve);
+
+	neckHeight = givenPlatFormHight * 0.3; // assume the neck height as a fraction of the given platform height, just for hard cordding
+
+	gp_Trsf theTransformationNeckPoint;
+	theTransformationNeckPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(neckHeight));
+	gp_Pnt neckEndPoint = neckStartPoint.Transformed(theTransformationNeckPoint);
+
+	Handle(Geom_TrimmedCurve) neckLineCurve = GC_MakeSegment(neckStartPoint, neckEndPoint);
+
+	TopoDS_Edge neckLineEdge = BRepBuilderAPI_MakeEdge(neckLineCurve);
+
+	QVector<TopoDS_Edge> firstHalfFirTreeEdges;
+
+
+	gp_Pnt lastLobeReleaf_LastPoint;
+	gp_Pnt lobeLoadEdge_1_FirstPoint = neckEndPoint;
+	TopoDS_Edge edgeBeforeLobeLoad = neckLineEdge;
+	TopoDS_Edge lastLobeReleaf;
+
+	for (int i = 0; i < (numberOfLobes); i++)
+	{
+		// assume the lobe Load Length as a fraction of the given platform height, just for hard cordding
+		Standard_Real lobeLoadLength = givenPlatFormHight * (0.6 - (0.15*i));
+
+		//*********don't delete following commented line. In real, we use that instead of above one.
+		//Standard_Real lobeLoadLength = lobeLoadLengths.value(i);
+
+		gp_Trsf theTransformationLobeLoadEdge_1_Point;
+		theTransformationLobeLoadEdge_1_Point.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(lobeLoadLength));
+
+		gp_Pnt angleLastPointBefore = lobeLoadEdge_1_FirstPoint.Transformed(theTransformationLobeLoadEdge_1_Point);
+
+		gp_Ax1 neckEndPointAxis(lobeLoadEdge_1_FirstPoint, gp::DZ());
+
+		gp_Pnt LobeLoad_LastPoint = angleLastPointBefore.Rotated(neckEndPointAxis, lobeLodeAngle);
+
+		Handle(Geom_TrimmedCurve) LobeLoad_Curve = GC_MakeSegment(lobeLoadEdge_1_FirstPoint, LobeLoad_LastPoint);
+
+		TopoDS_Edge lobeLoad_Edge = BRepBuilderAPI_MakeEdge(LobeLoad_Curve);
+
+		TopoDS_Edge convexFilletEdge = make2dFillet(edgeBeforeLobeLoad, lobeLoad_Edge, lobeLoadEdge_1_FirstPoint, convexRadius, rotatingAxis3);
+
+
+		if (i == 0)
+		{
+			neckLineEdge = edgeBeforeLobeLoad;
+		}
+		else
+		{
+			firstHalfFirTreeEdges.insert(0, edgeBeforeLobeLoad);
+		}
+
+		// assume the Lobe Thickness as a fraction of the given platform height, just for hard cordding
+		Standard_Real lobeThickness = givenPlatFormHight * 0.1;
+
+		//*********don't delete following commented line. In real, we use that instead of above one.
+		//Standard_Real lobeThickness = lobeThicknesses.value(i);
+
+		gp_Trsf theTransformationLobeReleaf_Point;
+		theTransformationLobeReleaf_Point.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(lobeThickness));
+
+		gp_Pnt lobeReleaf_LastPoint = lobeLoadEdge_1_FirstPoint.Transformed(theTransformationLobeReleaf_Point);
+
+		Handle(Geom_TrimmedCurve) lobeReleaf_Curve = GC_MakeSegment(LobeLoad_LastPoint, lobeReleaf_LastPoint);
+
+		TopoDS_Edge lobeReleaf_Edge = BRepBuilderAPI_MakeEdge(lobeReleaf_Curve);
+
+
+		TopoDS_Edge concaveFilletEdge = make2dFillet(lobeLoad_Edge, lobeReleaf_Edge, LobeLoad_LastPoint, concaveRadius, rotatingAxis3);
+
+		if (!convexFilletEdge.IsNull())
+		{
+			firstHalfFirTreeEdges.insert(0, convexFilletEdge);
+		}
+
+		firstHalfFirTreeEdges.insert(0, lobeLoad_Edge);
+		firstHalfFirTreeEdges.insert(0, concaveFilletEdge);
+
+		lastLobeReleaf_LastPoint = lobeReleaf_LastPoint;
+		lobeLoadEdge_1_FirstPoint = lastLobeReleaf_LastPoint;
+		edgeBeforeLobeLoad = lobeReleaf_Edge;
+
+	}
+
+	// firTreeHeight according to the above assumptions (lobeThickness, numberOfLobes and neckHeight)
+	Standard_Real firTreeHeight = neckHeight + ((givenPlatFormHight * 0.1)*2);
+
+	//*********don't delete following commented lines. In real, we use that instead of above one.
+
+	/*
+	Standard_Real sumOfLobeThicknesses = 0;
+	for (int j = 0; j < lobeThicknesses.length();j++)
+	{
+		sumOfLobeThicknesses += lobeThicknesses.value(j);
+	}
+	Standard_Real firTreeHeight = neckHeight + (sumOfLobeThicknesses);
+	*/
+
+	gp_Trsf theTransformationMidBottomPoint;
+	theTransformationMidBottomPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(firTreeHeight));
+
+	gp_Pnt MidBottomFirTreetPoint = firTreeCenterLinePointOnHubBottomCurve.Transformed(theTransformationMidBottomPoint);
+
+	Handle(Geom_TrimmedCurve) centerConnectCurve = GC_MakeSegment(lastLobeReleaf_LastPoint, MidBottomFirTreetPoint);
+
+	TopoDS_Edge centerConnectCurveEdge = BRepBuilderAPI_MakeEdge(centerConnectCurve);
+
+	TopoDS_Edge firTreeBottomFillet = make2dFillet(edgeBeforeLobeLoad, centerConnectCurveEdge, lastLobeReleaf_LastPoint, firTreebottomFilletRadius, rotatingAxis3);
+
+	firstHalfFirTreeEdges.insert(0, edgeBeforeLobeLoad);
+	firstHalfFirTreeEdges.insert(0, firTreeBottomFillet);
+	firstHalfFirTreeEdges.insert(0, centerConnectCurveEdge);
+
+
+	BRepBuilderAPI_MakeWire wireMaker1;
+
+	for (int i = 0; i < firstHalfFirTreeEdges.length();i++)
+	{
+		wireMaker1.Add(firstHalfFirTreeEdges.at(i));
+	}
+
+	TopoDS_Wire halfFirTreeWireProfile = wireMaker1.Wire();
+
+	gp_Trsf aTrsf;
+	aTrsf.SetMirror(firTreeCenterAxis);
+	BRepBuilderAPI_Transform aBRepTrsf(halfFirTreeWireProfile, aTrsf);
+	TopoDS_Shape aMirroredShape = aBRepTrsf.Shape();
+	TopoDS_Wire aMirroredWire = TopoDS::Wire(aMirroredShape);
+
+	BRepBuilderAPI_MakeWire mkWire(aMirroredWire);
+	mkWire.Add(halfFirTreeWireProfile);
+	TopoDS_Wire WireProfile = mkWire.Wire();
+
+	gp_Trsf neckLineTransfer;
+	neckLineTransfer.SetMirror(firTreeCenterAxis);
+	BRepBuilderAPI_Transform neckLine_BRepTrsf(neckLineEdge, neckLineTransfer);
+	TopoDS_Shape MirroredNeckLineShape = neckLine_BRepTrsf.Shape();
+
+	TopoDS_Edge MirroredNeckLineEdge = TopoDS::Edge(MirroredNeckLineShape);
+
+
+	TopoDS_Edge firTreeUpperFillet_side1 = make2dFillet(hubSide1HubBottomEdge, neckLineEdge, nearToSide1_neckStartPoint, firTreeupperFilletRadius, rotatingAxis3);
+	TopoDS_Edge firTreeUpperFillet_side2 = make2dFillet(MirroredNeckLineEdge, hubSide2HubBottomEdge, farToside1_neckStartPoint, firTreeupperFilletRadius, rotatingAxis3);
+
+
+	BRepBuilderAPI_MakeWire cutingToolWireMaker(WireProfile);
+	cutingToolWireMaker.Add(MirroredNeckLineEdge);
+	cutingToolWireMaker.Add(firTreeUpperFillet_side2);
+	cutingToolWireMaker.Add(hubSide2HubBottomEdge);
+	cutingToolWireMaker.Add(CuttingToolWire_WithHubThickness);
+	cutingToolWireMaker.Add(hubSide1HubBottomEdge);
+	cutingToolWireMaker.Add(firTreeUpperFillet_side1);
+	cutingToolWireMaker.Add(neckLineEdge);
+	
+	TopoDS_Wire firTreeCuttingToolFaceWire = cutingToolWireMaker.Wire();
+	return firTreeCuttingToolFaceWire;
+}
+
+/* use this function to create the deapthcutting tool face face wire*/
+TopoDS_Wire FirTreeCreator::create_DepthCuttingToolFaceWire(TopoDS_Wire CuttingToolWire_WithHubThickness, gp_Pnt point1, gp_Pnt point2)
 {
 	gp_Dir bladeCenterLine_Direction(badeAxisLineVector);
 	gp_Vec bladeCenterLine_UnitVector(bladeCenterLine_Direction);
@@ -139,6 +573,9 @@ TopoDS_Wire FirTreeCreator::creat_DepthCuttingToolFaceWire(TopoDS_Wire CuttingTo
 	return depthCuttingToolFaceWire;
 }
 
+/* we create cutting tool wire with hub thickness as a seperate funtion because we have to use this same wire
+	to create the deapth cutting tool face wire and the fir tree cutting tool wire. so, use use this funtion 
+	to seperate these two works*/
 TopoDS_Wire FirTreeCreator::create_cuttingToolWire_WithHubThickness(TopoDS_Wire cuttingToolOutterWire_WithHubAngles, 
 	gp_Pnt firstParameterSideLongCurveCuttingEgdgePoint, gp_Pnt lastParameterSideLongCurveCuttingEgdgePoint,
 	gp_Pnt& point1, gp_Pnt& point2)
@@ -166,15 +603,17 @@ TopoDS_Wire FirTreeCreator::create_cuttingToolWire_WithHubThickness(TopoDS_Wire 
 	TopoDS_Edge hubSide2Edge = BRepBuilderAPI_MakeEdge(hubSide2Curve);
 
 	BRepBuilderAPI_MakeWire wireMaker1;
+	wireMaker1.Add(hubSide2Edge);
 	wireMaker1.Add(cuttingToolOutterWire_WithHubAngles);
 	wireMaker1.Add(hubSide1Edge);
-	wireMaker1.Add(hubSide2Edge);
 
 	TopoDS_Wire cuttingToolWire_WithHubThickness = wireMaker1.Wire();
 
 	return cuttingToolWire_WithHubThickness;
 }
 
+/* If we want to cut different hub thicknesses, we have to use Cutting Tool Outter Wire With Hub Angles gain and again.
+	So, define this function to seperate these two works*/
 TopoDS_Wire FirTreeCreator::create_CuttingToolOutterWire_WithHubAngles(TopoDS_Wire cuttingToolOutterWire, Handle(Geom_Curve) longerCurve,
 	gp_Pnt firstParameterSidePoint_CuttingToolOutterWire, gp_Pnt lastParameterSidePoint_CuttingToolOutterWire, 
 	gp_Pnt& firstParameterSideLongCurveCuttingEgdgePoint, gp_Pnt& lastParameterSideLongCurveCuttingEgdgePoint)
@@ -256,13 +695,11 @@ TopoDS_Wire FirTreeCreator::create_CuttingToolOutterWire_WithHubAngles(TopoDS_Wi
 	TopoDS_Edge hubSide2Edge = BRepBuilderAPI_MakeEdge(hubSide2Curve);
 
 	BRepBuilderAPI_MakeWire wireMaker1;
+	wireMaker1.Add(hubSide2Edge);
+	wireMaker1.Add(hubFaceEdge2_CuttingTool);
 	wireMaker1.Add(cuttingToolOutterWire);
 	wireMaker1.Add(hubFaceEdge1_CuttingTool);
-	wireMaker1.Add(hubFaceEdge2_CuttingTool);
 	wireMaker1.Add(hubSide1Edge);
-	wireMaker1.Add(hubSide2Edge);
-	wireMaker1.Add(hubFaceEdge1_CuttingTool);
-	wireMaker1.Add(hubFaceEdge2_CuttingTool);
 
 	cuttingToolOutterWire_WithHubAngles = wireMaker1.Wire();
 	
@@ -270,6 +707,9 @@ TopoDS_Wire FirTreeCreator::create_CuttingToolOutterWire_WithHubAngles(TopoDS_Wi
 	return cuttingToolOutterWire_WithHubAngles;
 }
 
+/* we have to use the cutting tool Outter wire as same as it for many cases if want, such as that
+	if want to cut hub surface with different side angles for some levels, we can use this outter cutting tool wire 
+	again and again.*/
 TopoDS_Wire FirTreeCreator::create_CuttingToolOutterWire(gp_Pnt firstParameterPointOfLongerCurve, gp_Pnt lastParameterPointOfLongerCurve,
 		Standard_Real firstParameterOfLongerCurve, Standard_Real lastParameterOfLongerCurve, Standard_Real midParameterOflongercurve,
 		Handle(Geom_Curve) longerCurve, Standard_Real givenPlatformHight, gp_Pnt& firstParameterPoint_CuttingTool, gp_Pnt& lastParameterPoint_CuttingTool)
@@ -342,11 +782,12 @@ TopoDS_Wire FirTreeCreator::create_CuttingToolOutterWire(gp_Pnt firstParameterPo
 		TopoDS_Edge cuttingTool_BottomEdge = BRepBuilderAPI_MakeEdge(cuttingTool_BottomCurve);
 
 		BRepBuilderAPI_MakeWire wireMaker1;
-		wireMaker1.Add(upperConnecter1_Edge);
-		wireMaker1.Add(firstParameterSide_cuttingToolEdge);
-		wireMaker1.Add(cuttingTool_BottomEdge);
-		wireMaker1.Add(lastParameterSide_cuttingToolEdge);
 		wireMaker1.Add(upperConnecter2_Edge);
+		wireMaker1.Add(lastParameterSide_cuttingToolEdge);
+		wireMaker1.Add(cuttingTool_BottomEdge);
+		wireMaker1.Add(firstParameterSide_cuttingToolEdge);
+		wireMaker1.Add(upperConnecter1_Edge);
+
 		
 		cuttingToolOutterWire = wireMaker1.Wire();
 	}
@@ -359,13 +800,13 @@ TopoDS_Wire FirTreeCreator::create_CuttingToolOutterWire(gp_Pnt firstParameterPo
 	return cuttingToolOutterWire;
 }
 
-
+/* given blade shape is a imported one from the out side to the our context in the programe.
+	So, we get this imported shape to a variable(shape) from the context by this function*/
 TopoDS_Shape FirTreeCreator::getBlade(void)
 {
 	/* get the imported blade shape to the parameter shape*/
 	TopoDS_Shape shape;
 	AIS_ListOfInteractive objList;
-	//myOccView->getContext()->DisplayedObjects(objList);
 	myContext->DisplayedObjects(objList);
 	AIS_ListIteratorOfListOfInteractive iter;
 	for (iter.Initialize(objList); iter.More(); iter.Next())
@@ -376,10 +817,20 @@ TopoDS_Shape FirTreeCreator::getBlade(void)
 			shape = Handle(AIS_Shape)::DownCast(aisShp)->Shape();
 		}
 	}
+
+	if (shape.IsNull())
+	{
+		QMessageBox msgBox;
+		msgBox.setText("Please, Import the bladeshape");
+		msgBox.exec();
+		
+	}
+
 	return shape;
 }
 
-
+/* If the given blade shape is a shell we have to convert it to a solid for cutting purposes.
+	As a sample, I was given a shell*/
 TopoDS_Shape FirTreeCreator::getSolidBlade(TopoDS_Shape shellShape)
 {
 	/* convert given shell to a solid*/
@@ -388,17 +839,30 @@ TopoDS_Shape FirTreeCreator::getSolidBlade(TopoDS_Shape shellShape)
 	return shape;
 }
 
+/* use this fuction to get the selected face from the context to a variable*/
 TopoDS_Face FirTreeCreator::getSelectedFace()
 {
 	/* get the selected face to the parameter selectedFace*/
 	TopoDS_Shape selectedShape;
-	//myOccView->getContext()->InitSelected();
 	myContext->InitSelected();
 	selectedShape = myContext->SelectedShape();
 	TopoDS_Face selectedFace = TopoDS::Face(selectedShape);
+	/*
+	if (selectedFace.IsNull())
+	{
+		QMessageBox msgBox;
+		msgBox.setText("Please, Select the front face of the blade platform");
+		msgBox.exec();
+
+	}
+	*/
+
 	return selectedFace;
 }
 
+/* In my case, select a face as an input to get the position and the initially wanted properties from the given face.
+	For that, want to find the longer edge and the shorter edge seperatly from the selected face. for that , want to identify the 
+	all edges from the selected face as the curved Edges and Straight edges. use this function for that.*/
 void FirTreeCreator::getFaceEdges(TopoDS_Face selectedFace, QVector<TopoDS_Edge>& curvedTopoDSEdges, QVector<TopoDS_Edge>& straightTopoDSEdges)
 {
 	/* find what the curved edges and straight edges*/
@@ -428,11 +892,11 @@ void FirTreeCreator::getFaceEdges(TopoDS_Face selectedFace, QVector<TopoDS_Edge>
 	}
 }
 
+/* In my case, select a face as an input to get the position and the initially wanted properties from the given face.
+	For that, want to find the longer edge and the shorter edge seperatly from the selected face. use this function for that.*/
 void FirTreeCreator::getCurveEdges(QVector<TopoDS_Edge> curvedTopoDSEdges, TopoDS_Edge& longerCurveEdge, TopoDS_Edge& shoterCurveEdge)
 {
 	/* find what the longer curve edge*/
-	
-
 	GProp_GProps lengthProps1;
 	GProp_GProps lengthProps2;
 
@@ -460,6 +924,7 @@ void FirTreeCreator::getCurveEdges(QVector<TopoDS_Edge> curvedTopoDSEdges, TopoD
 	}
 }
 
+/* we use this fuction to find the following properties for the hub surface curve on the related face (Assume selected face)*/
 void FirTreeCreator::getEdgeProperties(TopoDS_Edge edge, gp_Pnt& firstParameterPoint, gp_Pnt& lastParameterPoint, gp_Pnt& CenterPoint,
 	Standard_Real& firstParameter, Standard_Real& lastParameter, Standard_Real& centerParameter, Handle(Geom_Curve)& curve)
 {
@@ -471,6 +936,9 @@ void FirTreeCreator::getEdgeProperties(TopoDS_Edge edge, gp_Pnt& firstParameterP
 	lastParameterPoint = curve->Value(lastParameter);
 }
 
+/* we want to find the find the shaft Axial point related to the initialy considering face (Assume selected face).
+	the we want to find different Axises which are useful more through out the code.
+	so, we set them as following.*/
 void FirTreeCreator::setRotatingAxiProperties(gp_Pnt bladeAxisPointOnHubSerface)
 {
 	/* get rotating Axis properties*/
