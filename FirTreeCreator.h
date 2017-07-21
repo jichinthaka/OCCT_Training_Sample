@@ -7,8 +7,11 @@
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Wire.hxx>
+#include <TopTools_ListOfShape.hxx>
 
 #include <Geom_Curve.hxx>
+
+#include <AIS_Shape.hxx>
 
 #include <QVector>
 
@@ -45,7 +48,8 @@ private:
 
 	TopoDS_Wire create_DepthCuttingToolFaceWire(TopoDS_Wire CuttingToolWire_WithHubThickness, gp_Pnt point1, gp_Pnt point2);
 
-	//TopoDS_Shape create_CuttingToolCompound(TopoDS_Wire faceWireCuttingTool, Standard_Real cuttingToolDeapth);
+	TopoDS_Shape create_CuttingToolSolid(TopoDS_Wire faceWireCuttingTool, Standard_Real cuttingToolDeapth, 
+		Standard_Real depthToStart, Standard_Real cuttingToolDeapthTolerance);
 
 	TopoDS_Wire create_firTree1_CuttingToolFaceWire(TopoDS_Wire CuttingToolWire_WithHubThickness, gp_Pnt point1, gp_Pnt point2);
 
@@ -58,6 +62,12 @@ private:
 
 	TopoDS_Edge make2dFillet(TopoDS_Edge& e1, TopoDS_Edge& e2, gp_Pnt CommonPoint, Standard_Real r, gp_Ax3 thePlane);
 
+	void displayASape(TopoDS_Shape topoDSShape);
+
+	void removeDisplaiedAISShape(void);
+
+	bool BooleanCutTwoShapes(TopTools_ListOfShape aLS, TopTools_ListOfShape aLT, TopoDS_Shape &cutShape);
+
 
 public:
 	void inItAlgo(Standard_Real A1, Standard_Real A2, Standard_Real A3, Standard_Real A4, gp_Pnt bladeCenterPointOnHubSerface,
@@ -67,9 +77,29 @@ public:
 
 	TopoDS_Shape build(void);
 
+	void setA1InDegrees(Standard_Real A1InDegrees_);
+	void setA2InDegrees(Standard_Real A2InDegrees_);
+	void setA3InDegrees(Standard_Real A3InDegrees_);
+	void setA4InDegrees(Standard_Real A4InDegrees_);
+	void setBottomNeckWidth(Standard_Real bottomNeckWidth_);
+	void setHubThickness(Standard_Real hubThickness_);
+	void setNeckHeight(Standard_Real neckHeight_);
+	void setLobeLodeAngle(QVector<Standard_Real> lobeLodeAngles_);
+	void setNumberOfLobes(Standard_Real numberOfLobes_);
+	void setConcaveRadius(QVector<Standard_Real> concaveRadius_);
+	void setConvexRadius(QVector<Standard_Real> convexRadius_);
+	void setFirTreebottomFilletRadius(Standard_Real firTreebottomFilletRadius_);
+	void setFirTreeupperFilletRadius(Standard_Real firTreeupperFilletRadius_);
+	void setLobeLoadLengths(QVector<Standard_Real> lobeLoadLengths_);
+	void setLobeThicknesses(QVector<Standard_Real> lobeThicknesses_);
+	//void setFirTreeDepthFrom_SelectedFace(Standard_Real firTreeDepthFrom_SelectedFace);
+	//void setFirTreeDepthFrom_NextToSelectedFace(Standard_Real firTreeDepthFrom_NextToSelectedFace);
+
 private:
 	//OccView* myOccView;
 	Handle_AIS_InteractiveContext myContext;
+
+	QVector<Handle(AIS_Shape)> handleAISShapesVector;
 
 	gp_Pnt rotatingAxisPointForSelectedPlane;
 	gp_Ax1 rotatingAxis;
@@ -83,35 +113,52 @@ private:
 
 private:
 	/* these are my inputs. hard coded just for now*/
-	Standard_Real A1 = (3.141 * 1.1) / 6;	//angle from blade center to one hub side
-	Standard_Real A2 = (3.141 * 1) / 6;		//angle from blade center to next hub side
-	Standard_Real A3 = (3.141 * (0.7)) / 6;	//angle from blade center to fir tree center
+
+	Standard_Real A1InDegrees = 35.22;
+	Standard_Real A2InDegrees = 20.19;
+	Standard_Real A3InDegrees = 0;
+
+	Standard_Real A4InDegrees = 6;
+
+	Standard_Real A1 = ((3.141 / 180)*35.56);/* 0.75;//0492;//*///(3.141 * 0.8) / 6;	//angle from blade center to one hub side
+	Standard_Real A2 = 0.6108;//0865;//*/(3.141 * 1.165234002) / 6;		//angle from blade center to next hub side
+	Standard_Real A3 = 0; //-(3.141 * (0.7)) / 6;	//angle from blade center to fir tree center
 
 	Standard_Real A4 = (3.141 * 0.5) / 15;	//just for now, assume Neck Thickness by an angle
 
 	Standard_Real givenPlatFormHight = NULL; // this use only to reduce the cutting tool are
 
-	Standard_Real bottomNeckWidth;
+	Standard_Real givenPlatFormThickness = 50;	//just for now we use this, we should be able to find that using given shape
+
+	
 	QVector<Standard_Real> releafBottomWidths;
 
 	gp_Pnt bladeAxisPointOnHubSerface;	//asume it is the selected face longer curve center 
-	Standard_Real hubThickness = 2;
+	Standard_Real hubThickness = 3;
 	Standard_Real neckHeight;	//just hard coded as a fraction of selected face center line length
+	Standard_Real bottomNeckWidth;
 	QVector<Standard_Real> lobeLoadLengths;	//this is the first firtree upper angle length
 									//get it as a fraction of selected face center line length
 									//other other angle lengths are redusing fraction of this
 	QVector<Standard_Real> lobeThicknesses;	//get it as a fraction of selected face center line length
 									//other other angle lengths are redusing fraction of this
 
-	Standard_Real numberOfLobes = 3;	// we can calculate this from the length of the lobeLoadLengths vector
+	Standard_Real numberOfLobes = 2;	// we can calculate this from the length of the lobeLoadLengths vector
 										//this value is only a hard codded one
 
-	Standard_Real lobeLodeAngle = (3.141 * 2.5) / 6;
+	//Standard_Real lobeLodeAngle = (3.141 * 2.5) / 6;
+	QVector<Standard_Real> lobeLodeAngles;
 
-	Standard_Real concaveRadius = 1.0;
-	Standard_Real convexRadius = 1.8;
+	
+	QVector<Standard_Real> concaveRadius;
+	
+	QVector<Standard_Real> convexRadius;
+
+
 	Standard_Real firTreebottomFilletRadius = 3.8;
 	Standard_Real firTreeupperFilletRadius = 0.9;
+
+
 
 	Standard_Real firTreeDepthFrom_SelectedFace = 5;
 	Standard_Real firTreeDepthFrom_NextToSelectedFace = 5;

@@ -107,6 +107,8 @@ private slots:
 
 	void setFirTree3(void);
 
+	void setFirTree4(void);
+
 	void Checker(void);
 
 	void setFilletMode(void);

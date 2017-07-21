@@ -11,7 +11,8 @@
 
 #include "occQt.h"
 #include "occView.h"
-#include "FirTreeCreator.h"
+//#include "FirTreeCreator.h"
+#include "occ_FirTreeInputDialog.h"
 
 //#include <qinputdialog.h>
 
@@ -247,7 +248,7 @@ void occQt::createActions( void )
 
 	firTreeAction = new QAction(tr("Fir Tree"), this);
 	firTreeAction->setStatusTip(tr("Set Fir Tree"));
-	connect(firTreeAction, SIGNAL(triggered()), this, SLOT(setFirTree3()));
+	connect(firTreeAction, SIGNAL(triggered()), this, SLOT(setFirTree4()));
 
 	//setFirTreeAction = new QAction(tr("SetFirTree"), this);
 	//setFirTreeAction->setStatusTip(tr("Set Fir Tree using seperate class"));
@@ -1164,6 +1165,7 @@ void occQt::removeDisplaiedAISShape(void)
 		Handle(AIS_Shape) anAis = handleAISShapesVector.takeLast();
 		myOccView->getContext()->Remove(anAis);
 	}
+	myOccView->getContext()->RemoveAll();
 	myOccView->getContext()->UpdateCurrentViewer();
 	
 }
@@ -2429,7 +2431,6 @@ void occQt::setFirTree2()
 	translate2.SetTranslation(Vec);
 	BRepBuilderAPI_Transform translated2(depthCuttingToolFaceProfile, translate2);
 	TopoDS_Shape depthCuttingToolFaceTransformedShape = translated2.Shape();
-	
 
 	TopoDS_Shape firTreeCuttingTool = BRepPrimAPI_MakePrism(toolFaceProfileTranslatedShape, depthOfFirTree_PrismVec + toleranceVector);
 	TopoDS_Shape depthCuttingTool_FromSelectedFace = BRepPrimAPI_MakePrism(depthCuttingToolFaceProfile, depthFromSelectedFace_PrismVec);
@@ -2693,137 +2694,22 @@ void occQt::Checker()
 
 void occQt::setFirTree3()
 {
-	FirTreeCreator myFirTreeCreator(myOccView->getContext());
-	TopoDS_Shape outputshape =  myFirTreeCreator.build();
-	removeDisplaiedAISShape();
-	displayASape(outputshape);
+	//FirTreeCreator* myFirTreeCreator = new FirTreeCreator(myOccView->getContext());
+	//TopoDS_Shape outputshape =  myFirTreeCreator->build();
+	//removeDisplaiedAISShape();
+	//displayASape(outputshape);
+}
+
+void occQt::setFirTree4()
+{
+
+	occ_FirTreeInputDialog *w = new occ_FirTreeInputDialog(this, myOccView->getContext());
+	w->setModal(false);
+	w->show();
+	//w.raise();
+	//w.activateWindow();
 }
 
 
 
 
-
-	
-	/*
-
-	QDialog * d = new QDialog();
-	d->setWindowTitle("Enter Fir Tree Data");
-	QVBoxLayout * vbox = new QVBoxLayout();
-
-	QLabel * lableinterceptA = new QLabel("Intercept A  ");
-	QDoubleSpinBox * spinBoxInterceptA = new QDoubleSpinBox();
-	spinBoxInterceptA->setDecimals(5);
-	spinBoxInterceptA->setSingleStep(0.00001);
-	spinBoxInterceptA->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableSlopB = new QLabel("Slop B  ");
-	QDoubleSpinBox * spinBoxSlopB = new QDoubleSpinBox();
-	spinBoxSlopB->setDecimals(5);
-	spinBoxSlopB->setSingleStep(0.00001);
-	spinBoxSlopB->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableInterceptC = new QLabel("Intercept C  ");
-	QDoubleSpinBox * spinBoxInterceptC = new QDoubleSpinBox();
-	spinBoxInterceptC->setDecimals(5);
-	spinBoxInterceptC->setSingleStep(0.00001);
-	spinBoxInterceptC->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableSlopD = new QLabel("Slop D  ");
-	QDoubleSpinBox * spinBoxSlopD = new QDoubleSpinBox();
-	spinBoxSlopD->setDecimals(5);
-	spinBoxSlopD->setSingleStep(0.00001);
-	spinBoxSlopD->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableNeckE = new QLabel("Neck E  ");
-	QDoubleSpinBox * spinBoxNeckE = new QDoubleSpinBox();
-	spinBoxNeckE->setDecimals(5);
-	spinBoxNeckE->setSingleStep(0.00001);
-	spinBoxNeckE->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableRadiusA1 = new QLabel("Radius A1  ");
-	QDoubleSpinBox * spinBoxRadiusA1 = new QDoubleSpinBox();
-	spinBoxRadiusA1->setDecimals(5);
-	spinBoxRadiusA1->setSingleStep(0.00001);
-	spinBoxRadiusA1->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableRadiusB1 = new QLabel("Radius B1  ");
-	QDoubleSpinBox * spinBoxRadiusB1 = new QDoubleSpinBox();
-	spinBoxRadiusB1->setDecimals(5);
-	spinBoxRadiusB1->setSingleStep(0.00001);
-	spinBoxRadiusB1->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableAngleC1 = new QLabel("Angle C1  ");
-	QDoubleSpinBox * spinBoxAngleC1 = new QDoubleSpinBox();
-	spinBoxAngleC1->setDecimals(5);
-	spinBoxAngleC1->setSingleStep(0.00001);
-	spinBoxAngleC1->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableAngleD1 = new QLabel("Angle D1  ");
-	QDoubleSpinBox * spinBoxAngleD1 = new QDoubleSpinBox();
-	spinBoxAngleD1->setDecimals(5);
-	spinBoxAngleD1->setSingleStep(0.00001);
-	spinBoxAngleD1->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableRadiusA2 = new QLabel("Radius A2  ");
-	QDoubleSpinBox * spinBoxRadiusA2 = new QDoubleSpinBox();
-	spinBoxRadiusA2->setDecimals(5);
-	spinBoxRadiusA2->setSingleStep(0.00001);
-	spinBoxRadiusA2->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableRadiusB2 = new QLabel("Radius B2  ");
-	QDoubleSpinBox * spinBoxRadiusB2 = new QDoubleSpinBox();
-	spinBoxRadiusB2->setDecimals(5);
-	spinBoxRadiusB2->setSingleStep(0.00001);
-	spinBoxRadiusB2->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableAngleC2 = new QLabel("Angle C2  ");
-	QDoubleSpinBox * spinBoxAngleC2 = new QDoubleSpinBox();
-	spinBoxAngleC2->setDecimals(5);
-	spinBoxAngleC2->setSingleStep(0.00001);
-	spinBoxAngleC2->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableAngleD2 = new QLabel("Angle D2  ");
-	QDoubleSpinBox * spinBoxAngleD2 = new QDoubleSpinBox();
-	spinBoxAngleD2->setDecimals(5);
-	spinBoxAngleD2->setSingleStep(0.00001);
-	spinBoxAngleD2->setMaximum(std::numeric_limits<double>::infinity());
-	QLabel * lableBacePosition = new QLabel("Base Position  ");
-	QDoubleSpinBox * spinBoxBacePosition = new QDoubleSpinBox();
-	spinBoxBacePosition->setDecimals(5);
-	spinBoxBacePosition->setSingleStep(0.00001);
-	spinBoxBacePosition->setMaximum(std::numeric_limits<double>::infinity());
-	//QLineEdit * lineEditA = new QLineEdit();
-
-	QDialogButtonBox * buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok
-		| QDialogButtonBox::Cancel);
-
-	QObject::connect(buttonBox, SIGNAL(accepted()), d, SLOT(accept()));
-	QObject::connect(buttonBox, SIGNAL(rejected()), d, SLOT(reject()));
-
-	vbox->addWidget(lableinterceptA);
-	vbox->addWidget(lableSlopB);
-	vbox->addWidget(lableInterceptC);
-	vbox->addWidget(lableSlopD);
-	vbox->addWidget(lableNeckE);
-	vbox->addWidget(lableRadiusA1);
-	vbox->addWidget(lableRadiusB1);
-	vbox->addWidget(lableAngleC1);
-	vbox->addWidget(lableAngleD1);
-	vbox->addWidget(lableRadiusA2);
-	vbox->addWidget(lableRadiusB2);
-	vbox->addWidget(lableAngleC2);
-	vbox->addWidget(lableAngleD2);
-	vbox->addWidget(lableBacePosition);
-	
-	vbox->addWidget(buttonBox);
-
-	d->setLayout(vbox);
-
-	int result = d->exec();
-
-	while (true)
-	{
-		if (result == QDialog::Accepted)
-		{
-			//boxLength = spinBoxLength->value();
-			//boxWidth = spinBoxWidth->value();
-			//boxHeight = spinBoxHeight->value();
-
-		}
-		else
-		{
-			return;
-		}
-	}
-
-	*/
-
-//}

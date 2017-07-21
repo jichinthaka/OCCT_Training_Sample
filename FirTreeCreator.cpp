@@ -14,7 +14,10 @@
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepPrimAPI_MakePrism.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
+#include <BRepAlgoAPI_Cut.hxx>
+//#include <BRepAlgo_Cut.hxx>
 #include <BRep_Tool.hxx>
 #include <BRepGProp.hxx>
 #include <BRepTools.hxx>
@@ -46,6 +49,15 @@ FirTreeCreator::~FirTreeCreator()
 
 TopoDS_Shape FirTreeCreator::build()
 {
+	/* convert the angles in degrees to radian angle which are using in my fuctions*/
+	/* hear, assume pi as 3.141 because otherwise it give error with cutting fuction.*/
+	/* this assumption is not effected us, because it give a difference after 5th decimal point 
+		when comparing with that if we use the real pi*/
+	A1 = ((3.141 / 180)*A1InDegrees);
+	A2 = ((3.141 / 180)*A2InDegrees);
+	A3 = ((3.141 / 180)*A3InDegrees);
+	A4 = ((3.141 / 180)*A4InDegrees);
+	
 	TopoDS_Shape givenBladeShape = getBlade();
 	TopoDS_Shape solidBladeShape = getSolidBlade(givenBladeShape);
 
@@ -110,17 +122,111 @@ TopoDS_Shape FirTreeCreator::build()
 	
 	/* creat a deapth cutting tool face*/
 	TopoDS_Wire DepthCuttingToolFaceWire = create_DepthCuttingToolFaceWire(CuttingToolWire_WithHubThickness, point1, point2);
+	BRepTools::Write(DepthCuttingToolFaceWire, "C:/Users/DELL/Desktop/Cut/DepthCuttingToolFaceWire.Brep");
 
 	TopoDS_Wire firTreeCuttingToolFaceWire = create_firTree2_CuttingToolFaceWire(CuttingToolWire_WithHubThickness, point1, point2);
 
+	TopoDS_Shape CuttingToolSolid_1 = create_CuttingToolSolid(DepthCuttingToolFaceWire, firTreeDepthFrom_SelectedFace, 0, 0);
+	//TopoDS_Solid CuttingToolSolid_1_solid = BRepBuilderAPI_MakeSolid(CuttingToolSolid_1);
+	TopoDS_Shape CuttingToolSolid_2 = create_CuttingToolSolid(firTreeCuttingToolFaceWire, givenPlatFormThickness - firTreeDepthFrom_NextToSelectedFace - firTreeDepthFrom_SelectedFace, firTreeDepthFrom_SelectedFace, 0);
+	//TopoDS_Solid CuttingToolSolid_2_solid = TopoDS::Solid(CuttingToolSolid_2);
+	TopoDS_Shape CuttingToolSolid_3 = create_CuttingToolSolid(DepthCuttingToolFaceWire, firTreeDepthFrom_NextToSelectedFace, givenPlatFormThickness - firTreeDepthFrom_NextToSelectedFace, 0);
+	//TopoDS_Solid CuttingToolSolid_3_solid = TopoDS::Solid(CuttingToolSolid_3);
+
+	//TopoDS_Face myFaceProfile = BRepBuilderAPI_MakeFace(firTreeCuttingToolFaceWire);
+
+	BRepTools::Write(solidBladeShape, "C:/Users/DELL/Desktop/Cut/solid.Brep");
+	BRepTools::Write(CuttingToolSolid_1, "C:/Users/DELL/Desktop/Cut/CuttingToolSolid_1.Brep");
+	/*
+	TopoDS_Solid solidBlade = TopoDS::Solid(solidBladeShape);
+	TopoDS_Shape shape = BRepAlgoAPI_Cut(solidBlade, CuttingToolSolid_1_solid);
+
+	TopoDS_Solid solidshape = TopoDS::Solid(shape);
+	shape = BRepAlgoAPI_Cut(solidshape, CuttingToolSolid_2_solid);
+
+	solidshape = TopoDS::Solid(shape);
+	shape = BRepAlgoAPI_Cut(solidshape, CuttingToolSolid_3_solid);
+	*/
 	
-	TopoDS_Face myFaceProfile = BRepBuilderAPI_MakeFace(firTreeCuttingToolFaceWire);
+	TopoDS_Shape shape;
+	TopTools_ListOfShape aLS;
+	aLS.Append(solidBladeShape);
 
+	TopTools_ListOfShape aLT;
+	aLT.Append(CuttingToolSolid_1);
+	aLT.Append(CuttingToolSolid_2);
+	aLT.Append(CuttingToolSolid_3);
 
+	BooleanCutTwoShapes(aLS,  aLT, shape);
+	
+	
+	BRepTools::Write(CuttingToolSolid_2, "C:/Users/DELL/Desktop/Cut/CuttingToolSolid_2.Brep");
+	BRepTools::Write(shape, "C:/Users/DELL/Desktop/Cut/shape.Brep");
 
-	return myFaceProfile;
+	removeDisplaiedAISShape();
+	displayASape(shape);
+
+	return shape;
 }
 
+/*Get the boolean cut of given two shapes*/
+
+bool FirTreeCreator::BooleanCutTwoShapes(TopTools_ListOfShape aLS, TopTools_ListOfShape aLT, TopoDS_Shape &cutShape)
+{
+	Standard_Boolean bRunParallel;
+	Standard_Integer iErr;
+	Standard_Real aFuzzyValue;
+	BRepAlgoAPI_Cut aBuilder;
+
+	bRunParallel = Standard_True;
+	aFuzzyValue = 2.1e-5;
+
+	// set the arguments  
+	aBuilder.SetArguments(aLS);
+	aBuilder.SetTools(aLT);
+	//    
+	// set parallel processing mode 
+	// if  bRunParallel= Standard_True :  the parallel processing is switched on
+	// if  bRunParallel= Standard_False :  the parallel processing is switched off
+	aBuilder.SetRunParallel(bRunParallel);
+	
+	// set Fuzzy value
+	// if aFuzzyValue=0.: the Fuzzy option is off
+	//  if aFuzzyValue>0.: the Fuzzy option is on
+	aBuilder.SetFuzzyValue(aFuzzyValue);
+	
+	// run the algorithm 
+	aBuilder.Build();
+	iErr = aBuilder.ErrorStatus();
+	if (iErr) {
+		// an error treatment
+		return false;
+	}
+	cutShape = aBuilder.Shape();
+	return true;
+}
+
+
+TopoDS_Shape FirTreeCreator::create_CuttingToolSolid(TopoDS_Wire faceWireCuttingTool, Standard_Real cuttingToolDeapth, 
+	Standard_Real depthToStart, Standard_Real cuttingToolDeapthTolerance)
+{
+	TopoDS_Face faceCuttingTool = BRepBuilderAPI_MakeFace(faceWireCuttingTool);
+	if(depthToStart!=0)
+	{
+	gp_Vec Vec(0, 0, -(depthToStart));
+	gp_Trsf translate2;
+	translate2.SetTranslation(Vec);
+	BRepBuilderAPI_Transform translated2(faceCuttingTool, translate2);
+	TopoDS_Shape faceCuttingToolAfterTranceform = translated2.Shape();
+	faceCuttingTool = TopoDS::Face(faceCuttingToolAfterTranceform);
+	}
+	
+	gp_Vec depthFromSelectedFace_PrismVec(0, 0, -(cuttingToolDeapth + cuttingToolDeapthTolerance));
+
+	TopoDS_Shape CuttingTool = BRepPrimAPI_MakePrism(faceCuttingTool, depthFromSelectedFace_PrismVec);
+
+	return CuttingTool;
+}
 
 
 /* 2D fillet making is in seperatly with this function for firTree creation because ChFi2d_FilletAPI does not work 
@@ -138,6 +244,8 @@ TopoDS_Edge FirTreeCreator::make2dFillet(TopoDS_Edge& e1, TopoDS_Edge& e2, gp_Pn
 	return filletEdge;
 }
 
+/*In this firTree creation function, mesure neck thickness, lobe thicknesses along the firTree center line and we can
+	set the lobe width from firTree center line*/
 TopoDS_Wire FirTreeCreator::create_firTree2_CuttingToolFaceWire(TopoDS_Wire CuttingToolWire_WithHubThickness, gp_Pnt point1, gp_Pnt point2)
 {
 	gp_Dir bladeCenterLine_Direction(badeAxisLineVector);
@@ -213,7 +321,7 @@ TopoDS_Wire FirTreeCreator::create_firTree2_CuttingToolFaceWire(TopoDS_Wire Cutt
 	for (int i = 0; i < (numberOfLobes); i++)
 	{
 		// assume the lobe Load Length as a fraction of the given platform height, just for hard cordding
-		Standard_Real lobeLoadLength = givenPlatFormHight * (0.6 - (0.15*i));
+		Standard_Real lobeLoadLength = givenPlatFormHight * (0.55 - (0.15*i));
 
 		//*********don't delete following commented line. In real, we use that instead of above one.
 		//Standard_Real lobeLoadLength = lobeLoadLengths.value(i);
@@ -225,11 +333,23 @@ TopoDS_Wire FirTreeCreator::create_firTree2_CuttingToolFaceWire(TopoDS_Wire Cutt
 
 		gp_Ax1 neckEndPointAxis(lobeLoadEdge_1_FirstPoint, gp::DZ());
 
+		// assume the lobe Load Angle as following, just for hard cordding
+		Standard_Real lobeLodeAngle = (3.141 * 2.5) / 6;
+
+		//*********don't delete following commented line. In real, we use that instead of above one.
+		//Standard_Real lobeLodeAngle = lobeLodeAngles.value(i);
+
 		gp_Pnt LobeLoad_LastPoint = angleLastPointBefore.Rotated(neckEndPointAxis, lobeLodeAngle);
 
 		Handle(Geom_TrimmedCurve) LobeLoad_Curve = GC_MakeSegment(lobeLoadEdge_1_FirstPoint, LobeLoad_LastPoint);
 
 		TopoDS_Edge lobeLoad_Edge = BRepBuilderAPI_MakeEdge(LobeLoad_Curve);
+
+		// assume the convex Radius as following, just for hard cordding
+		Standard_Real convexRadius = 1.0;
+
+		//*********don't delete following commented line. In real, we use that instead of above one.
+		//Standard_Real convexRadius = convexRadius.value(i);
 
 		TopoDS_Edge convexFilletEdge = make2dFillet(edgeBeforeLobeLoad, lobeLoad_Edge, lobeLoadEdge_1_FirstPoint, convexRadius, rotatingAxis3);
 
@@ -246,7 +366,7 @@ TopoDS_Wire FirTreeCreator::create_firTree2_CuttingToolFaceWire(TopoDS_Wire Cutt
 		}
 
 		// assume the Lobe Thickness as a fraction of the given platform height, just for hard cordding
-		Standard_Real lobeThickness = givenPlatFormHight * 0.3;
+		Standard_Real lobeThickness = givenPlatFormHight * 0.2;
 
 		//*********don't delete following commented line. In real, we use that instead of above one.
 		//Standard_Real lobeThickness = lobeThicknesses.value(i);
@@ -272,6 +392,11 @@ TopoDS_Wire FirTreeCreator::create_firTree2_CuttingToolFaceWire(TopoDS_Wire Cutt
 
 		TopoDS_Edge lobeReleaf_Edge = BRepBuilderAPI_MakeEdge(lobeReleaf_Curve);
 
+		// assume the concave Radius as following, just for hard cordding
+		Standard_Real concaveRadius = 1.0;
+
+		//*********don't delete following commented line. In real, we use that instead of above one.
+		//Standard_Real concaveRadius = concaveRadius.value(i);
 
 		TopoDS_Edge concaveFilletEdge = make2dFillet(lobeLoad_Edge, lobeReleaf_Edge, LobeLoad_LastPoint, concaveRadius, rotatingAxis3);
 
@@ -346,6 +471,7 @@ TopoDS_Wire FirTreeCreator::create_firTree2_CuttingToolFaceWire(TopoDS_Wire Cutt
 	TopoDS_Wire firTreeCuttingToolFaceWire = cutingToolWireMaker.Wire();
 	return firTreeCuttingToolFaceWire;
 }
+
 
 TopoDS_Wire FirTreeCreator::create_firTree1_CuttingToolFaceWire(TopoDS_Wire CuttingToolWire_WithHubThickness, gp_Pnt point1, gp_Pnt point2)
 {
@@ -425,11 +551,23 @@ TopoDS_Wire FirTreeCreator::create_firTree1_CuttingToolFaceWire(TopoDS_Wire Cutt
 
 		gp_Ax1 neckEndPointAxis(lobeLoadEdge_1_FirstPoint, gp::DZ());
 
+		// assume the lobe Load Angle as following, just for hard cordding
+		Standard_Real lobeLodeAngle = (3.141 * 2.5) / 6;
+
+		//*********don't delete following commented line. In real, we use that instead of above one.
+		//Standard_Real lobeLodeAngle = lobeLodeAngles.value(i);
+
 		gp_Pnt LobeLoad_LastPoint = angleLastPointBefore.Rotated(neckEndPointAxis, lobeLodeAngle);
 
 		Handle(Geom_TrimmedCurve) LobeLoad_Curve = GC_MakeSegment(lobeLoadEdge_1_FirstPoint, LobeLoad_LastPoint);
 
 		TopoDS_Edge lobeLoad_Edge = BRepBuilderAPI_MakeEdge(LobeLoad_Curve);
+
+		// assume the convex Radius as following, just for hard cordding
+		Standard_Real convexRadius = 1.8;
+
+		//*********don't delete following commented line. In real, we use that instead of above one.
+		//Standard_Real convexRadius = convexRadius.value(i);
 
 		TopoDS_Edge convexFilletEdge = make2dFillet(edgeBeforeLobeLoad, lobeLoad_Edge, lobeLoadEdge_1_FirstPoint, convexRadius, rotatingAxis3);
 
@@ -458,6 +596,11 @@ TopoDS_Wire FirTreeCreator::create_firTree1_CuttingToolFaceWire(TopoDS_Wire Cutt
 
 		TopoDS_Edge lobeReleaf_Edge = BRepBuilderAPI_MakeEdge(lobeReleaf_Curve);
 
+		// assume the concave Radius as following, just for hard cordding
+		Standard_Real concaveRadius = 1.0;
+
+		//*********don't delete following commented line. In real, we use that instead of above one.
+		//Standard_Real concaveRadius = concaveRadius.value(i);
 
 		TopoDS_Edge concaveFilletEdge = make2dFillet(lobeLoad_Edge, lobeReleaf_Edge, LobeLoad_LastPoint, concaveRadius, rotatingAxis3);
 
@@ -480,14 +623,14 @@ TopoDS_Wire FirTreeCreator::create_firTree1_CuttingToolFaceWire(TopoDS_Wire Cutt
 
 	//*********don't delete following commented lines. In real, we use that instead of above one.
 
-	/*
-	Standard_Real sumOfLobeThicknesses = 0;
-	for (int j = 0; j < lobeThicknesses.length();j++)
-	{
-		sumOfLobeThicknesses += lobeThicknesses.value(j);
-	}
-	Standard_Real firTreeHeight = neckHeight + (sumOfLobeThicknesses);
-	*/
+	
+	//Standard_Real sumOfLobeThicknesses = 0;
+	//for (int j = 0; j < lobeThicknesses.length();j++)
+	//{
+	//	sumOfLobeThicknesses += lobeThicknesses.value(j);
+	//}
+	//Standard_Real firTreeHeight = neckHeight + (sumOfLobeThicknesses);
+	
 
 	gp_Trsf theTransformationMidBottomPoint;
 	theTransformationMidBottomPoint.SetTranslation(firTreeCenterToZAxisLine_UnitVector.Multiplied(firTreeHeight));
@@ -548,6 +691,8 @@ TopoDS_Wire FirTreeCreator::create_firTree1_CuttingToolFaceWire(TopoDS_Wire Cutt
 	TopoDS_Wire firTreeCuttingToolFaceWire = cutingToolWireMaker.Wire();
 	return firTreeCuttingToolFaceWire;
 }
+
+
 
 /* use this function to create the deapthcutting tool face face wire*/
 TopoDS_Wire FirTreeCreator::create_DepthCuttingToolFaceWire(TopoDS_Wire CuttingToolWire_WithHubThickness, gp_Pnt point1, gp_Pnt point2)
@@ -812,9 +957,11 @@ TopoDS_Shape FirTreeCreator::getBlade(void)
 	for (iter.Initialize(objList); iter.More(); iter.Next())
 	{
 		Handle(AIS_InteractiveObject) aisShp = iter.Value();
+		Handle(AIS_Shape) aisShape = Handle(AIS_Shape)::DownCast(aisShp);
+		handleAISShapesVector.append(aisShape);
 		if (aisShp->IsKind("AIS_Shape"))
 		{
-			shape = Handle(AIS_Shape)::DownCast(aisShp)->Shape();
+			shape = aisShape->Shape();
 		}
 	}
 
@@ -946,4 +1093,84 @@ void FirTreeCreator::setRotatingAxiProperties(gp_Pnt bladeAxisPointOnHubSerface)
 	rotatingAxis = gp_Ax1(rotatingAxisPointForSelectedPlane, gp::DZ());
 	rotatingAxis2 = gp_Ax2(rotatingAxisPointForSelectedPlane, gp::DZ());
 	rotatingAxis3 = gp_Ax3(rotatingAxis2);
+}
+
+void FirTreeCreator::setA1InDegrees(Standard_Real A1InDegrees_)
+{
+	A1InDegrees = A1InDegrees_;
+}
+void FirTreeCreator::setA2InDegrees(Standard_Real A2InDegrees_)
+{
+	A2InDegrees = A2InDegrees_;
+}
+void FirTreeCreator::setA3InDegrees(Standard_Real A3InDegrees_)
+{
+	A3InDegrees = A3InDegrees_;
+}
+void FirTreeCreator::setA4InDegrees(Standard_Real A4InDegrees_)
+{
+	A4InDegrees = A4InDegrees_;
+}
+void FirTreeCreator::setBottomNeckWidth(Standard_Real bottomNeckWidth_)
+{
+	bottomNeckWidth = bottomNeckWidth_;
+}
+void FirTreeCreator::setHubThickness(Standard_Real hubThickness_)
+{
+	hubThickness = hubThickness_;
+}
+void FirTreeCreator::setNeckHeight(Standard_Real neckHeight_)
+{
+	neckHeight = neckHeight_;
+}
+void FirTreeCreator::setLobeLodeAngle(QVector<Standard_Real> lobeLodeAngles_)
+{
+	lobeLodeAngles = lobeLodeAngles_;
+}
+void FirTreeCreator::setNumberOfLobes(Standard_Real numberOfLobes_)
+{
+	numberOfLobes = numberOfLobes_;
+}
+void FirTreeCreator::setConcaveRadius(QVector<Standard_Real> concaveRadius_)
+{
+	concaveRadius = concaveRadius_;
+}
+void FirTreeCreator::setConvexRadius(QVector<Standard_Real> convexRadius_)
+{
+	convexRadius = convexRadius_;
+}
+void FirTreeCreator::setFirTreebottomFilletRadius(Standard_Real firTreebottomFilletRadius_)
+{
+	firTreebottomFilletRadius = firTreebottomFilletRadius_;
+}
+void FirTreeCreator::setFirTreeupperFilletRadius(Standard_Real firTreeupperFilletRadius_)
+{
+	firTreeupperFilletRadius = firTreeupperFilletRadius_;
+}
+void FirTreeCreator::setLobeLoadLengths(QVector<Standard_Real> lobeLoadLengths_)
+{
+	lobeLoadLengths = lobeLoadLengths_;
+}
+void FirTreeCreator::setLobeThicknesses(QVector<Standard_Real> lobeThicknesses_)
+{
+	lobeThicknesses = lobeThicknesses_;
+}
+
+void FirTreeCreator::displayASape(TopoDS_Shape topoDSShape)
+{
+	Handle(AIS_Shape) anAis = new AIS_Shape(topoDSShape);
+	anAis->SetColor(Quantity_NOC_CORAL);
+	myContext->Display(anAis);
+	handleAISShapesVector.append(anAis);
+}
+
+void FirTreeCreator::removeDisplaiedAISShape(void)
+{
+	while (handleAISShapesVector.isEmpty() != TRUE) {
+		Handle(AIS_Shape) anAis = handleAISShapesVector.takeLast();
+		myContext->Remove(anAis);
+	}
+	
+	myContext->UpdateCurrentViewer();
+
 }
