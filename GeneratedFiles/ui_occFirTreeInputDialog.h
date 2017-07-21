@@ -471,7 +471,6 @@ public:
 
 
         retranslateUi(Dialog);
-        QObject::connect(finishButton, SIGNAL(clicked()), Dialog, SLOT(accept()));
         QObject::connect(cancelButton, SIGNAL(clicked()), Dialog, SLOT(reject()));
 
         tabWidget->setCurrentIndex(3);

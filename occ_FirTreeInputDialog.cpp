@@ -180,4 +180,5 @@ void occ_FirTreeInputDialog::setChangesOf_SetFirTreeCheckBox(int state)
 void occ_FirTreeInputDialog::setChangesOf_FinishButton()
 {
 	myFirTreeCreator->build();
+	this->accept();
 }
