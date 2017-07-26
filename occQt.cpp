@@ -254,6 +254,10 @@ void occQt::createActions( void )
 	//setFirTreeAction->setStatusTip(tr("Set Fir Tree using seperate class"));
 	//connect(setFirTreeAction, SIGNAL(triggered()), myFirTreeCreator, SLOT(build()));
 
+	makeManualCutAction = new QAction(tr("Make Manual Cut"), this);
+	makeManualCutAction->setStatusTip(tr("Make Manual Cut"));
+	connect(makeManualCutAction, SIGNAL(triggered()), this, SLOT(makeManualCut()));
+
 	setFilletModeAction = new QAction(tr("set Fillet Mode"), this);
 	setFilletModeAction->setStatusTip(tr("set Fillet Mode"));
 	connect(setFilletModeAction, SIGNAL(triggered()), this, SLOT(setFilletMode()));
@@ -363,6 +367,7 @@ void occQt::createToolBars( void )
 	bladeModifyToolBar->addAction(firTreeAction);
 	bladeModifyToolBar->addAction(setFilletModeAction);
 	bladeModifyToolBar->addAction(setFilletAction);
+	bladeModifyToolBar->addAction(makeManualCutAction);
 
     mHelpToolBar = addToolBar(tr("Help"));
     mHelpToolBar->addAction(mAboutAction);
@@ -2702,7 +2707,6 @@ void occQt::setFirTree3()
 
 void occQt::setFirTree4()
 {
-
 	occ_FirTreeInputDialog *w = new occ_FirTreeInputDialog(this, myOccView->getContext());
 	w->setModal(false);
 	w->show();
@@ -2711,5 +2715,295 @@ void occQt::setFirTree4()
 }
 
 
+#include <V3d_Viewer.hxx>
+#include <qmath.h>
 
+void occQt::makeManualCut(void)
+{
+	/* get the imported blade shape to the parameter shape*/
+	TopoDS_Shape shape;
+	AIS_ListOfInteractive objList;
+	myOccView->getContext()->DisplayedObjects(objList);
+	AIS_ListIteratorOfListOfInteractive iter;
+	for (iter.Initialize(objList); iter.More(); iter.Next())
+	{
+		Handle(AIS_InteractiveObject) aisShp = iter.Value();
+		if (aisShp->IsKind("AIS_Shape"))
+		{
+			shape = Handle(AIS_Shape)::DownCast(aisShp)->Shape();
+		}
+	}
+
+	/* convert given shell to a solid*/
+	TopoDS_Shell shell = TopoDS::Shell(shape);
+	shape = BRepBuilderAPI_MakeSolid(shell);
+
+	/* get the selected face to the parameter selectedFace*/
+	TopoDS_Shape selectedShape;
+	myOccView->getContext()->InitSelected();
+	selectedShape = myOccView->getContext()->SelectedShape();
+	TopoDS_Face selectedFace = TopoDS::Face(selectedShape);
+
+	/* find the (0, R, Z) points related to the points on each edge*/
+	TopExp_Explorer edgeExplorer(selectedFace, TopAbs_EDGE);
+	
+	QVector<QVector<gp_Pnt>> vectorOfpointsOnEachEdge;
+
+	while (edgeExplorer.More())
+	{
+		QVector<gp_Pnt> points0RZOnEdge;
+
+		TopoDS_Edge edge = TopoDS::Edge(edgeExplorer.Current());
+
+		Standard_Real first;
+		Standard_Real last;
+		Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, first, last);
+
+		GProp_GProps lengthProps;
+
+		BRepGProp::LinearProperties(edge, lengthProps);
+		double lengthOfEdge = lengthProps.Mass();
+
+		Standard_Real numberOfPoints;
+		if (lengthOfEdge <= 1)
+		{
+			numberOfPoints = 4;
+		}
+		else if (lengthOfEdge > 1)
+		{
+			numberOfPoints = 20;
+		}
+
+		gp_Pnt pointFirst = curve->Value(first);
+		Standard_Real R1 = qSqrt(qPow(pointFirst.X(), 2) + qPow(pointFirst.Y(), 2));
+		gp_Pnt point0RZ1(0, R1, pointFirst.Z());
+		points0RZOnEdge.append(point0RZ1);
+
+		Standard_Real deltaDifference = (last - first) / (numberOfPoints + 1);
+
+		for (int i = 0; i < numberOfPoints; i++)
+		{
+			Standard_Real parameter = first + (deltaDifference*(i+1));
+			gp_Pnt point = curve->Value(parameter);
+			Standard_Real R = qSqrt(qPow(point.X(), 2) + qPow(point.Y(), 2));
+			gp_Pnt point0RZ(0, R, point.Z());
+			points0RZOnEdge.append(point0RZ);
+		}
+
+		gp_Pnt pointLast = curve->Value(last);
+		Standard_Real R2 = qSqrt(qPow(pointLast.X(), 2) + qPow(pointLast.Y(), 2));
+		gp_Pnt point0RZ2(0, R2, pointLast.Z());
+		points0RZOnEdge.append(point0RZ2);
+
+		vectorOfpointsOnEachEdge.append(points0RZOnEdge);
+
+		edgeExplorer.Next();
+	}
+
+
+	QVector<TopoDS_Edge> edgesOn0RZ;
+
+	//removeDisplaiedAISShape();
+
+	for (int j = 0; j < vectorOfpointsOnEachEdge.length(); j++)
+	{
+		QVector<gp_Pnt> points0RZOnEdge = vectorOfpointsOnEachEdge.value(j);
+
+		Handle(Geom_BSplineCurve) bSplineCurve;
+		if (generateBSplineCurve(points0RZOnEdge, bSplineCurve))
+		{
+			Handle(Geom_BSplineCurve) curve = bSplineCurve;
+			TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(curve);
+			edgesOn0RZ.append(edge);
+
+			displayASape(edge);
+		}
+	}
+
+	BRepBuilderAPI_MakeWire wireMaker(edgesOn0RZ.value(0));
+	for (int i=0; i<(edgesOn0RZ.length()-1); i++)
+	{
+		wireMaker.Add(edgesOn0RZ.value(i+1));
+	}
+
+	TopoDS_Wire wire = wireMaker.Wire();
+
+	removeDisplaiedAISShape();
+	displayASape(wire);
+
+	TopoDS_Face faceOn0RZ = BRepBuilderAPI_MakeFace(wire);
+
+	GProp_GProps faceCenterGprop1;
+	BRepGProp::SurfaceProperties(selectedFace, faceCenterGprop1);
+	gp_Pnt centerOfSelectedFace = faceCenterGprop1.CentreOfMass();
+
+	GProp_GProps faceCenterGprop2;
+	BRepGProp::SurfaceProperties(faceOn0RZ, faceCenterGprop2);
+	gp_Pnt centerOfFaceOn0RZ = faceCenterGprop2.CentreOfMass();
+
+	gp_Pnt rotatingAxisPointForFaceCenter(0, 0, centerOfSelectedFace.Z());
+	gp_Ax1 rotatingAxisPointForFaceCenterAxis(rotatingAxisPointForFaceCenter, gp::DZ());
+
+	gp_Vec vectorFrom_centerOfSelectedFace(centerOfSelectedFace, rotatingAxisPointForFaceCenter);
+	gp_Vec vectorFrom_centerOfFaceOn0RZ(centerOfFaceOn0RZ, rotatingAxisPointForFaceCenter);
+
+	Standard_Real angleBetweenTwoCenters = vectorFrom_centerOfSelectedFace.Angle(vectorFrom_centerOfFaceOn0RZ);
+
+	gp_Ax2 anAxis(centerOfFaceOn0RZ, gp::DX());
+	TopoDS_Edge aCircleEdge = BRepBuilderAPI_MakeEdge(gp_Circ(anAxis, 3.0));
+	TopoDS_Wire aCircleWire = BRepBuilderAPI_MakeWire(aCircleEdge);
+	TopoDS_Face aCircleFace = BRepBuilderAPI_MakeFace(aCircleWire);
+
+	displayASape(aCircleWire);
+
+	gp_Trsf trasformation;
+	trasformation.SetRotation(rotatingAxisPointForFaceCenterAxis, -(angleBetweenTwoCenters + 0.01));
+	BRepBuilderAPI_Transform aTransform(aCircleFace, trasformation);
+
+	TopoDS_Shape transformedShape = aTransform.Shape();
+
+	//TopoDS_Face 
+
+	BRepPrimAPI_MakeRevol revoler(transformedShape, rotatingAxisPointForFaceCenterAxis, angleBetweenTwoCenters);
+	
+	TopoDS_Shape cuttingTool = revoler.Shape();
+
+	displayASape(cuttingTool);
+
+	TopoDS_Shape lastShape = BRepAlgoAPI_Cut(shape, cuttingTool);
+
+	removeDisplaiedAISShape();
+	displayASape(lastShape);
+
+	
+	/* find the points on edge curves*/
+	/*
+	TopExp_Explorer edgeExplorer(selectedFace, TopAbs_EDGE);
+
+	QVector<TopoDS_Edge> TopoDSEdges;
+	QVector<Handle(Geom_Curve)> curves;
+
+	QVector<Standard_Real> firstParametersOfCurves;
+	QVector<Standard_Real> lastParametersOfCurves;
+
+	QVector<Standard_Real> otherPointParameterOfCurves;
+	QVector<Standard_Real> vectorOfOtherPointParametersOfEach;
+
+	//QVector<TopoDS_Edge> straightTopoDSEdges;
+	//QVector<Handle(Geom_Curve)> curvedEdges;
+	//QVector<Handle(Geom_Curve)> curves;
+
+	while (edgeExplorer.More())
+	{
+		TopoDS_Edge edge = TopoDS::Edge(edgeExplorer.Current());
+		TopoDSEdges.append(edge);
+
+		Standard_Real first;
+		Standard_Real last;
+		Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, first, last);
+		curves.append(curve);
+		firstParametersOfCurves.append(first);
+		lastParametersOfCurves.append(last);
+
+		GProp_GProps lengthProps;
+
+		BRepGProp::LinearProperties(edge, lengthProps);
+		double lengthOfEdge = lengthProps.Mass();
+
+		Standard_Real numberOfPoints;
+		if (lengthOfEdge <= 1)
+		{
+			numberOfPoints = 4;
+		}
+		else if(lengthOfEdge > 1)
+		{
+			numberOfPoints = 20;
+		}
+
+		Standard_Real deltaDifference = (last - first) / (numberOfPoints + 1);
+
+		for (int i = 0; i < numberOfPoints; i++)
+		{
+			Standard_Real parameter = first + deltaDifference;
+			otherPointParameterOfCurves.append(parameter);
+		}
+		vectorOfOtherPointParametersOfEach.append(otherPointParameterOfCurves);
+
+		edgeExplorer.Next();
+	}
+	*/
+
+}
+
+
+
+#include <GeomAPI_Interpolate.hxx>
+
+/* Interpolate points to generate a BSpline curve */
+bool occQt::generateBSplineCurve(QVector<gp_Pnt> pointsForNewCrv, Handle(Geom_BSplineCurve) &bSplineCurve) 
+{
+	const int numPt = pointsForNewCrv.size();
+	Handle_TColgp_HArray1OfPnt pPoints = new TColgp_HArray1OfPnt(1, numPt);
+
+	for (int i = 1; i <= numPt; i++)
+		pPoints->SetValue(i, pointsForNewCrv[i - 1]);
+
+	try {
+		GeomAPI_Interpolate interp(pPoints, Standard_False, 1.0e-15);
+		interp.Perform();
+		if (interp.IsDone()) {
+			bSplineCurve = interp.Curve();
+		}
+	}
+	catch (Standard_ConstructionError) {
+		//eprintf("BSpline curve interpolation is failed");
+		//eprintf("Distance between two consecutive points in the table Points is less than or equal to Tolerance.");
+		return false;
+
+	}
+	catch (Standard_OutOfRange) {
+		//eprintf("BSpline curve interpolation is failed");
+		//eprintf("There are less than two points to generate BSpline Curve.");
+		return false;
+	}
+	catch (Standard_Failure) {
+		//eprintf("BSpline curve interpolation is failed");
+		return false;
+	}
+	catch (...) {
+		//eprintf("Unhandled exception in generating BSplineCurve");
+		return false;
+	}
+
+	return true;
+}
+
+#include <GeomAPI_PointsToBSpline.hxx>
+bool occQt::makeBSplineCurve(QVector<gp_Pnt> pointsForNewCrv, Handle(Geom_BSplineCurve) &bSplineCurve)
+{
+	TColgp_Array1OfPnt array1(1, pointsForNewCrv.length());
+
+	for (int i = 0; i < pointsForNewCrv.length(); i++)
+	{
+		array1.SetValue(1, pointsForNewCrv.value(i));
+	}
+	Standard_Real R1 = 2; //Knots
+
+	Standard_Integer I1 = 2; //Multiplicities
+
+	const Standard_Integer Degree = 3;
+
+	const Standard_Boolean Periodic = Standard_False;
+
+	GeomAPI_PointsToBSpline bspline(array1);
+	if (bspline.IsDone())
+	{
+		bSplineCurve = bspline.Curve();
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
 

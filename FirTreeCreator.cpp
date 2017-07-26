@@ -47,8 +47,12 @@ FirTreeCreator::~FirTreeCreator()
 {
 }
 
+//#include <QTime>
 TopoDS_Shape FirTreeCreator::build()
 {
+	//QTime myTimer;
+	//myTimer.start();
+
 	/* convert the angles in degrees to radian angle which are using in my fuctions*/
 	/* hear, assume pi as 3.141 because otherwise it give error with cutting fuction.*/
 	/* this assumption is not effected us, because it give a difference after 5th decimal point 
@@ -133,7 +137,14 @@ TopoDS_Shape FirTreeCreator::build()
 	TopoDS_Shape CuttingToolSolid_3 = create_CuttingToolSolid(DepthCuttingToolFaceWire, firTreeDepthFrom_NextToSelectedFace, givenPlatFormThickness - firTreeDepthFrom_NextToSelectedFace, 0);
 	//TopoDS_Solid CuttingToolSolid_3_solid = TopoDS::Solid(CuttingToolSolid_3);
 
+	//int nMilliseconds = myTimer.elapsed();
 	//TopoDS_Face myFaceProfile = BRepBuilderAPI_MakeFace(firTreeCuttingToolFaceWire);
+
+	removeDisplaiedAISShape();
+	displayASape(CuttingToolSolid_1);
+	displayASape(CuttingToolSolid_2);
+	displayASape(CuttingToolSolid_2);
+
 
 	BRepTools::Write(solidBladeShape, "C:/Users/DELL/Desktop/Cut/solid.Brep");
 	BRepTools::Write(CuttingToolSolid_1, "C:/Users/DELL/Desktop/Cut/CuttingToolSolid_1.Brep");

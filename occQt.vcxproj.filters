@@ -46,17 +46,20 @@
       <Extensions>cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
     <Filter Include="Generated Files\Debug">
-      <UniqueIdentifier>{3c4f3f3b-2b1a-4011-9d54-271cdf6d6dc0}</UniqueIdentifier>
+      <UniqueIdentifier>{d6ff582d-f12c-4bb7-bc82-0b2bbf3fa4ab}</UniqueIdentifier>
       <Extensions>cpp;moc</Extensions>
       <SourceControlFiles>False</SourceControlFiles>
     </Filter>
     <Filter Include="Generated Files\Release">
-      <UniqueIdentifier>{9bf84d34-d3dc-4283-b4e3-0595a30e07be}</UniqueIdentifier>
+      <UniqueIdentifier>{f129f59c-1439-4a25-b6cb-edad9d9ce779}</UniqueIdentifier>
       <Extensions>cpp;moc</Extensions>
       <SourceControlFiles>False</SourceControlFiles>
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="FirTreeCreator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -65,6 +68,15 @@
     </ClCompile>
     <ClCompile Include="occView.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="occ_FirTreeInputDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Debug\moc_occ_FirTreeInputDialog.cpp">
+      <Filter>Generated Files\Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="Release\moc_occ_FirTreeInputDialog.cpp">
+      <Filter>Generated Files\Release</Filter>
     </ClCompile>
     <ClCompile Include="Debug\moc_occView.cpp">
       <Filter>Generated Files\Debug</Filter>
@@ -83,12 +95,24 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="FirTreeCreator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <CustomBuild Include="occQt.h">
       <Filter>Header Files</Filter>
     </CustomBuild>
     <CustomBuild Include="occView.h">
       <Filter>Header Files</Filter>
     </CustomBuild>
+    <CustomBuild Include="occ_FirTreeInputDialog.h">
+      <Filter>Header Files</Filter>
+    </CustomBuild>
+    <ClInclude Include="GeneratedFiles\ui_occFirTreeInputDialog.h">
+      <Filter>Generated Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GeneratedFiles\ui_occQt.h">
+      <Filter>Generated Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="debug\moc_predefs.h.cbt">
@@ -99,6 +123,9 @@
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
+    <CustomBuild Include="occFirTreeInputDialog.ui">
+      <Filter>Form Files</Filter>
+    </CustomBuild>
     <CustomBuild Include="occQt.ui">
       <Filter>Form Files</Filter>
     </CustomBuild>
@@ -167,10 +194,5 @@
     <None Include="Resources\torus.png">
       <Filter>Resource Files</Filter>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="GeneratedFiles\ui_occQt.h">
-      <Filter>Generated Files</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>

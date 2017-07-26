@@ -20,6 +20,7 @@
 #include <AIS_Shape.hxx>
 #include <AIS_TextLabel.hxx>
 #include <TopoDS.hxx>
+#include <Geom_BSplineCurve.hxx>
 
 class OccView;
 
@@ -109,6 +110,8 @@ private slots:
 
 	void setFirTree4(void);
 
+	void makeManualCut(void);
+
 	void Checker(void);
 
 	void setFilletMode(void);
@@ -142,6 +145,9 @@ private:
 	TopoDS_Edge makeFilletsOrChamfers(TopoDS_Edge &edge1, TopoDS_Edge &edge2, gp_Pnt commonPoint, double filletRadius, gp_Pln plane, bool &isDone, bool isFillet);
 
 	void make2dFilletMy(TopoDS_Edge e1, TopoDS_Edge e2);
+
+	bool generateBSplineCurve(QVector<gp_Pnt> pointsForNewCrv, Handle(Geom_BSplineCurve) &bSplineCurve);
+	bool makeBSplineCurve(QVector<gp_Pnt> pointsForNewCrv, Handle(Geom_BSplineCurve) &bSplineCurve);
 	
 
 private:
@@ -187,6 +193,8 @@ private:
     QAction* myHelixAction;
 
 	QAction* firTreeAction;
+
+	QAction* makeManualCutAction;
 
 	//QAction* setFirTreeAction;
 
