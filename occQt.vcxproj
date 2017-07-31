@@ -148,6 +148,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="FirTreeCreator.cpp" />
+    <ClCompile Include="FirTreeCreatorV2.cpp" />
     <ClCompile Include="GeneratedFiles\qrc_occqt.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
       </PrecompiledHeader>
@@ -161,6 +162,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="FirTreeCreator.h" />
+    <ClInclude Include="FirTreeCreatorV2.h" />
     <ClInclude Include="GeneratedFiles\ui_occFirTreeInputDialog.h" />
     <ClInclude Include="GeneratedFiles\ui_occQt.h" />
     <CustomBuild Include="occQt.h">

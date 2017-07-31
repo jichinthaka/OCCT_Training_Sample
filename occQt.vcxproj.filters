@@ -46,18 +46,21 @@
       <Extensions>cpp;c;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
     <Filter Include="Generated Files\Debug">
-      <UniqueIdentifier>{d6ff582d-f12c-4bb7-bc82-0b2bbf3fa4ab}</UniqueIdentifier>
+      <UniqueIdentifier>{5c5ea4ba-7899-4487-8a42-3576bf2c9666}</UniqueIdentifier>
       <Extensions>cpp;moc</Extensions>
       <SourceControlFiles>False</SourceControlFiles>
     </Filter>
     <Filter Include="Generated Files\Release">
-      <UniqueIdentifier>{f129f59c-1439-4a25-b6cb-edad9d9ce779}</UniqueIdentifier>
+      <UniqueIdentifier>{4276b686-7072-4191-96a9-398b09d3f24e}</UniqueIdentifier>
       <Extensions>cpp;moc</Extensions>
       <SourceControlFiles>False</SourceControlFiles>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FirTreeCreator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="FirTreeCreatorV2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
@@ -96,6 +99,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="FirTreeCreator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FirTreeCreatorV2.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <CustomBuild Include="occQt.h">

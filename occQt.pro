@@ -15,6 +15,7 @@ SOURCES += main.cpp \
     occQt.cpp       \
     occView.cpp		\
 	FirTreeCreator.cpp \
+	FirTreeCreatorV2.cpp \
 	occ_FirTreeInputDialog.cpp
 
 CONFIG += c++11
@@ -23,6 +24,7 @@ HEADERS  += \
     occQt.h \
     occView.h \
 	FirTreeCreator.h \
+	FirTreeCreatorV2.h \
 	occ_FirTreeInputDialog.h
 
 FORMS    += \

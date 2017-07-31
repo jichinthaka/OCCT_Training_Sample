@@ -1,6 +1,5 @@
-
 #include "ui_occFirTreeInputDialog.h"
-#include "FirTreeCreator.h"
+#include "FirTreeCreatorV2.h"
 
 #include <AIS_InteractiveContext.hxx>
 
@@ -16,7 +15,7 @@ public:
 
 private:
 	Ui::Dialog *ui;
-	FirTreeCreator* myFirTreeCreator;
+	FirTreeCreatorV2* myFirTreeCreator;
 
 private slots:
 	void setChangesOf_SetHubAnglesCheckbox(int state);

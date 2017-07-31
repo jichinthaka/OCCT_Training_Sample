@@ -11,7 +11,7 @@ occ_FirTreeInputDialog::occ_FirTreeInputDialog(QWidget *parent, Handle_AIS_Inter
 	ui = new Ui::Dialog();
 	ui->setupUi(this);
 
-    myFirTreeCreator =  new FirTreeCreator(context);
+    myFirTreeCreator =  new FirTreeCreatorV2(context);
 
 	connect(ui->setHubAngles_checkBox, SIGNAL(stateChanged(int)), this, SLOT(setChangesOf_SetHubAnglesCheckbox(int)));
 	connect(ui->setDepthCutting_checkBox, SIGNAL(stateChanged(int)), this, SLOT(setChangesOf_SetDepthCuttingCheckBox(int)));
